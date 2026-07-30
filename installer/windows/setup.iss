@@ -154,6 +154,57 @@ begin
     RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\' + Scheme);
 end;
 
+{ Remove the `.torrent` file association registered at runtime by
+  native/hub/src/file_association.rs (toggled from the app's settings page,
+  独立于 install-time 的 torrentassoc task — that task's [Registry] entries
+  carry uninsdeletekey, but a runtime-written association is invisible to the
+  uninstall log). Only removes the ProgID tree if its shell\open\command
+  still points at this install's exe, and only removes the `.torrent`
+  extension key if it still maps to our ProgID (mirrors the conservative
+  ownership check in file_association.rs::disassociate). }
+procedure RemoveTorrentAssociation;
+var
+  Command, RegisteredExe, AppExe, ProgId: String;
+begin
+  if not RegQueryStringValue(HKCU, 'Software\Classes\FluxDown.TorrentFile\shell\open\command', '', Command) then
+    Exit;
+  RegisteredExe := ExtractQuotedExe(Command);
+  AppExe := ExpandConstant('{app}\{#MyAppExeName}');
+  if (RegisteredExe = '') or (CompareText(RegisteredExe, AppExe) <> 0) then
+    Exit;
+  if RegQueryStringValue(HKCU, 'Software\Classes\.torrent', '', ProgId)
+    and (CompareText(ProgId, 'FluxDown.TorrentFile') = 0) then
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\.torrent');
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\FluxDown.TorrentFile');
+end;
+
+{ Remove the autostart Run value written at runtime by the launch_at_startup
+  plugin (lib/main.dart — value name "FluxDown", data `"<exe>" --silentStart`).
+  The app migrates even the installer-written task entry to this runtime form
+  on first launch (lib/main.dart, "legacy/installer autostart entry"
+  migration), so after any app run the uninstall log no longer matches the
+  value and uninsdeletevalue alone cannot be relied on. Only removes the
+  value if it still points at this install's exe. }
+procedure RemoveAutostartRunValue;
+var
+  Command, RegisteredExe, AppExe: String;
+begin
+  if not RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#MyAppName}', Command) then
+    Exit;
+  RegisteredExe := ExtractQuotedExe(Command);
+  { Legacy entries may store the path unquoted; fall back to the raw value
+    with any trailing arguments stripped. }
+  if RegisteredExe = '' then
+  begin
+    RegisteredExe := Trim(Command);
+    if Pos(' --', RegisteredExe) > 0 then
+      RegisteredExe := Trim(Copy(RegisteredExe, 1, Pos(' --', RegisteredExe) - 1));
+  end;
+  AppExe := ExpandConstant('{app}\{#MyAppExeName}');
+  if (RegisteredExe <> '') and (CompareText(RegisteredExe, AppExe) = 0) then
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#MyAppName}');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
@@ -170,5 +221,10 @@ begin
     { fluxdown:// / ed2k:// URL protocol handlers — same gap as above. }
     RemoveProtocolHandler('fluxdown');
     RemoveProtocolHandler('ed2k');
+
+    { .torrent association + autostart Run value — runtime-written variants
+      of the [Registry] task entries, invisible to the uninstall log. }
+    RemoveTorrentAssociation;
+    RemoveAutostartRunValue;
   end;
 end;
