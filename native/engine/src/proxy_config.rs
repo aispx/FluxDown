@@ -89,7 +89,10 @@ impl ProxyType {
         match s {
             "https" => Self::Https,
             "socks4" => Self::Socks4,
-            "socks5" => Self::Socks5,
+            // `socks5h` (remote-DNS SOCKS5, see `Self::scheme`) accepted as an
+            // alias so a user manually typing it into a custom proxy URL field
+            // isn't silently downgraded to `Http`.
+            "socks5" | "socks5h" => Self::Socks5,
             _ => Self::Http,
         }
     }
@@ -104,12 +107,23 @@ impl ProxyType {
     }
 
     /// URL scheme used by reqwest's `Proxy::all(url)`.
+    ///
+    /// SOCKS5 uses `socks5h` (not `socks5`) so hostname resolution happens on
+    /// the proxy side rather than the client. reqwest's `socks5` scheme
+    /// resolves DNS *locally* before tunneling the connection through the
+    /// proxy by IP — for hosts under DNS-level blocking (e.g. Google/YouTube
+    /// domains behind the GFW), local resolution fails or returns a poisoned
+    /// address even though the proxy itself can reach the real host, making
+    /// the proxy silently useless for exactly the traffic it exists to route
+    /// (issue #251). SOCKS4 keeps `socks4` — remote resolution needs the
+    /// SOCKS4a extension, unverified against this reqwest version, and no
+    /// report covers it.
     pub fn scheme(&self) -> &'static str {
         match self {
             Self::Http => "http",
             Self::Https => "https",
             Self::Socks4 => "socks4",
-            Self::Socks5 => "socks5",
+            Self::Socks5 => "socks5h",
         }
     }
 
@@ -194,7 +208,7 @@ impl ProxyConfig {
         self.proxy_type.is_socks()
     }
 
-    /// Build the full proxy URL string, e.g. `socks5://user:pass@host:port`.
+    /// Build the full proxy URL string, e.g. `socks5h://user:pass@host:port`.
     ///
     /// Used by reqwest's `Proxy::all(url)` and for display purposes.
     /// Returns `None` if mode is `None` or host is empty.
@@ -1276,6 +1290,7 @@ mod tests {
         assert_eq!(ProxyType::parse_str("https"), ProxyType::Https);
         assert_eq!(ProxyType::parse_str("socks4"), ProxyType::Socks4);
         assert_eq!(ProxyType::parse_str("socks5"), ProxyType::Socks5);
+        assert_eq!(ProxyType::parse_str("socks5h"), ProxyType::Socks5);
         assert_eq!(ProxyType::parse_str("unknown"), ProxyType::Http);
         assert_eq!(ProxyType::parse_str(""), ProxyType::Http);
     }
@@ -1285,7 +1300,7 @@ mod tests {
         assert_eq!(ProxyType::Http.scheme(), "http");
         assert_eq!(ProxyType::Https.scheme(), "https");
         assert_eq!(ProxyType::Socks4.scheme(), "socks4");
-        assert_eq!(ProxyType::Socks5.scheme(), "socks5");
+        assert_eq!(ProxyType::Socks5.scheme(), "socks5h");
     }
 
     #[test]
@@ -1385,7 +1400,7 @@ mod tests {
         };
         assert_eq!(
             config.to_proxy_url().as_deref(),
-            Some("socks5://admin:secret@socks.example.com:1080")
+            Some("socks5h://admin:secret@socks.example.com:1080")
         );
     }
 
@@ -1766,7 +1781,7 @@ mod tests {
         // '@' and ':' in credentials must be percent-encoded
         assert!(url.contains("user%40domain"));
         assert!(url.contains("p%40ss%3Aword"));
-        assert!(url.starts_with("socks5://"));
+        assert!(url.starts_with("socks5h://"));
         assert!(url.ends_with("@proxy.com:1080"));
     }
 
