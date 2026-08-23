@@ -73,10 +73,9 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(windows))'.dependencies]
-# Linux/macOS 用 rustls（纯 Rust，无系统 TLS 依赖）
-# default-features = false：去掉 default-tls（native-tls→openssl，Android 交叉编译无 openssl）；
-# 其余默认特性显式保留，Linux/macOS 行为不变
-reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls-native-roots", "cookies", "json", "socks", "charset", "http2", "system-proxy", "macos-system-configuration"] }
+# 非 Windows 用 rustls（纯 Rust，无系统 TLS 依赖）。native roots 保留本地 CA；
+# bundled WebPKI roots 为 Android/iOS 提供公共 CA 兜底，避免空信任库。
+reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls-native-roots", "rustls-tls-webpki-roots", "cookies", "json", "socks", "charset", "http2", "system-proxy", "macos-system-configuration"] }
 # 系统调用：fallocate（文件预分配）、posix_fadvise（页缓存释放）
 libc = "0.2"
 
