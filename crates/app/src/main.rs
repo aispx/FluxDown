@@ -1,9 +1,12 @@
-//! `fluxdown-desktop` 的薄入口；窗口与 UI 状态由 `fluxdown_ui_shell` 负责。
+//! `fluxdown-desktop` 的薄入口；应用装配集中在本 crate。
+
+mod app;
+mod assets;
 
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    match fluxdown_ui_shell::run() {
+    match app::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("failed to start FluxDown desktop client: {error:#}");

@@ -19,8 +19,11 @@ use gpui_component::{
     v_flex,
 };
 
-use super::{DownloadView, SelectAllTasks, TASK_ROW_HEIGHT, TaskKind, TaskPreview, TaskState};
-use crate::strings::DownloadStrings;
+use crate::{
+    model::{TaskKind, TaskPreview, TaskState},
+    pages::downloads::{DownloadView, SelectAllTasks, TASK_ROW_HEIGHT},
+    strings::DownloadStrings,
+};
 
 const SELECTION_COLUMN_WIDTH: f32 = 36.;
 const TABLE_HEADER_CROP: f32 = 2.;
@@ -131,7 +134,7 @@ impl Render for DraggedColumnMenuItem {
     }
 }
 
-pub(super) struct DownloadTableDelegate {
+pub(crate) struct DownloadTableDelegate {
     strings: DownloadStrings,
     columns: Vec<DownloadColumn>,
     items: Vec<TaskPreview>,
@@ -140,7 +143,7 @@ pub(super) struct DownloadTableDelegate {
 }
 
 impl DownloadTableDelegate {
-    pub(super) fn new(strings: DownloadStrings, items: Vec<TaskPreview>) -> Self {
+    pub(crate) fn new(strings: DownloadStrings, items: Vec<TaskPreview>) -> Self {
         Self {
             strings,
             columns: DownloadColumnKind::ALL
@@ -153,7 +156,7 @@ impl DownloadTableDelegate {
         }
     }
 
-    pub(super) fn set_strings(&mut self, strings: DownloadStrings) {
+    pub(crate) fn set_strings(&mut self, strings: DownloadStrings) {
         self.strings = strings;
     }
 
@@ -255,6 +258,18 @@ impl DownloadTableDelegate {
                 self.selected_tasks.insert(task_id);
             }
         } else {
+            self.selected_tasks.clear();
+            self.selected_tasks.insert(task_id);
+        }
+        self.selection_anchor = Some(task_id);
+    }
+
+    pub(crate) fn task_id_at(&self, row_ix: usize) -> Option<usize> {
+        self.items.get(row_ix).map(|task| task.id)
+    }
+
+    pub(crate) fn select_task_for_context_menu(&mut self, task_id: usize) {
+        if !self.selected_tasks.contains(&task_id) {
             self.selected_tasks.clear();
             self.selected_tasks.insert(task_id);
         }
@@ -821,7 +836,7 @@ impl DownloadView {
             .child(self.render_columns_menu(cx))
     }
 
-    pub(super) fn render_main(&self, cx: &mut Context<Self>) -> Div {
+    pub(crate) fn render_main(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
         v_flex()
             .size_full()
@@ -855,5 +870,31 @@ impl DownloadView {
                             ),
                     ),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, sync::Arc};
+
+    use fluxdown_ui_i18n::{I18nCatalog, I18nError};
+
+    use super::DownloadTableDelegate;
+    use crate::{model::preview_tasks, strings::DownloadStrings};
+
+    #[test]
+    fn context_menu_selection_preserves_selected_rows_and_replaces_unselected_rows()
+    -> Result<(), I18nError> {
+        let catalog = Arc::new(I18nCatalog::load_embedded()?);
+        let strings = DownloadStrings::from_translator(&catalog.translator("en"));
+        let mut delegate = DownloadTableDelegate::new(strings, preview_tasks());
+        delegate.selected_tasks.extend([0, 1]);
+
+        delegate.select_task_for_context_menu(1);
+        assert_eq!(delegate.selected_tasks, HashSet::from([0, 1]));
+
+        delegate.select_task_for_context_menu(2);
+        assert_eq!(delegate.selected_tasks, HashSet::from([2]));
+        Ok(())
     }
 }

@@ -2849,7 +2849,15 @@ dependencies = [
 name = "fluxdown_ui_app"
 version = "0.1.0"
 dependencies = [
+ "fluxdown_ui_downloads",
+ "fluxdown_ui_i18n",
+ "fluxdown_ui_settings",
  "fluxdown_ui_shell",
+ "fluxdown_ui_theme",
+ "gpui",
+ "gpui-component",
+ "gpui-component-assets",
+ "gpui_platform",
  "winresource",
 ]
 
@@ -2863,11 +2871,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "fluxdown_ui_downloads"
+version = "0.1.0"
+dependencies = [
+ "fluxdown_ui_components",
+ "fluxdown_ui_i18n",
+ "fluxdown_ui_theme",
+ "gpui",
+ "gpui-component",
+]
+
+[[package]]
 name = "fluxdown_ui_i18n"
 version = "0.1.0"
 dependencies = [
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fluxdown_ui_settings"
+version = "0.1.0"
+dependencies = [
+ "fluxdown_ui_components",
+ "fluxdown_ui_i18n",
+ "fluxdown_ui_theme",
+ "gpui",
+ "gpui-component",
 ]
 
 [[package]]
@@ -2879,9 +2909,6 @@ dependencies = [
  "fluxdown_ui_theme",
  "gpui",
  "gpui-component",
- "gpui-component-assets",
- "gpui_platform",
- "thiserror 2.0.18",
 ]
 
 [[package]]

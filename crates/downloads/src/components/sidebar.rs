@@ -8,7 +8,10 @@ use gpui_component::{
     ActiveTheme as _, Icon, IconName, h_flex, scroll::ScrollableElement as _, v_flex,
 };
 
-use super::{DownloadView, SidebarItem, SidebarSection};
+use crate::{
+    model::{SidebarItem, SidebarSection},
+    pages::downloads::DownloadView,
+};
 
 impl DownloadView {
     fn section_header(
@@ -307,7 +310,7 @@ impl DownloadView {
             })
     }
 
-    pub(super) fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let surface = active_theme(cx).tokens().colors.surface;
         v_flex()
             .size_full()

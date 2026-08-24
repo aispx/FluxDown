@@ -127,6 +127,9 @@ pub fn install_theme(
         tokens,
     });
 
+    for handle in cx.windows() {
+        let _ = handle.update(cx, |_, window, _| window.refresh());
+    }
     if let Some(window) = window {
         window.refresh();
     }
