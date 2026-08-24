@@ -61,11 +61,16 @@ impl Default for FluxThemeDefinition {
 }
 
 fn semantic_tokens(colors: ColorTokens) -> SemanticThemeTokens {
+    let typography = TypographyTokens {
+        sans: "MiSans".into(),
+        ..TypographyTokens::default()
+    };
+
     SemanticThemeTokens {
         colors,
         radius: RadiusTokens::default(),
         spacing: SpacingTokens::default(),
-        typography: TypographyTokens::default(),
+        typography,
         shadow: ShadowTokens::elevations(Hsla {
             h: 0.,
             s: 0.,

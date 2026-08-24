@@ -7,6 +7,8 @@
   "settings": "Settings",
   "browse": "Browse",
   "manage": "Manage",
+  "delete": "Delete",
+  "stopAll": "Stop All",
   "auto": "Auto",
   "categoryAll": "All Files",
   "categoryVideo": "Video",

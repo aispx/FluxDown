@@ -4,10 +4,11 @@
 //! crate 接入，避免把业务、组件和二进制入口重新堆回单一编译单元。
 
 mod assets;
+mod downloads;
 mod strings;
 mod view;
 
-use std::{env, sync::Arc};
+use std::{borrow::Cow, env, sync::Arc};
 
 use fluxdown_ui_i18n::{I18nCatalog, I18nError};
 use gpui::{AppContext, Bounds, WindowBounds, WindowOptions, px, size};
@@ -16,6 +17,9 @@ use thiserror::Error;
 
 use assets::DesktopAssets;
 use view::{ShellView, component_locale};
+const MI_SANS_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Regular.ttf");
+const MI_SANS_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Medium.ttf");
+const MI_SANS_SEMIBOLD: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Semibold.ttf");
 
 /// 桌面 shell 启动失败。
 #[derive(Debug, Error)]
@@ -33,6 +37,15 @@ pub fn run() -> Result<(), ShellError> {
     gpui_platform::application()
         .with_assets(DesktopAssets)
         .run(move |cx| {
+            if let Err(error) = cx.text_system().add_fonts(vec![
+                Cow::Borrowed(MI_SANS_REGULAR),
+                Cow::Borrowed(MI_SANS_MEDIUM),
+                Cow::Borrowed(MI_SANS_SEMIBOLD),
+            ]) {
+                eprintln!("failed to load FluxDown UI fonts: {error:#}");
+                return;
+            }
+
             gpui_component::init(cx);
             fluxdown_ui_theme::init(cx);
             gpui_component::set_locale(&locale);
@@ -42,7 +55,7 @@ pub fn run() -> Result<(), ShellError> {
             options.window_bounds = Some(WindowBounds::Windowed(bounds));
 
             if let Err(error) = cx.open_window(options, |window, cx| {
-                let shell = cx.new(|_| ShellView::new(translator));
+                let shell = cx.new(|cx| ShellView::new(translator, cx));
                 cx.new(|cx| Root::new(shell, window, cx))
             }) {
                 eprintln!("failed to open FluxDown desktop window: {error:#}");

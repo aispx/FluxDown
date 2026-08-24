@@ -37,6 +37,8 @@ class S {
   String get settings => _r('settings');
   String get browse => _r('browse');
   String get manage => _r('manage');
+  String get delete => _r('delete');
+  String get stopAll => _r('stopAll');
   String get manageTooltip => 'Ctrl+A';
   String get auto => _r('auto');
 

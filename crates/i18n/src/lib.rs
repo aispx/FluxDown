@@ -18,26 +18,52 @@ pub const FALLBACK_LOCALE: &str = "en";
 /// 初始桌面 shell 使用的翻译键；完整键集仍可通过字符串访问。
 pub mod keys {
     pub const CATEGORY_ALL: &str = "categoryAll";
+    pub const CATEGORY_ARCHIVE: &str = "categoryArchive";
+    pub const CATEGORY_AUDIO: &str = "categoryAudio";
+    pub const CATEGORY_DOCUMENT: &str = "categoryDocument";
+    pub const CATEGORY_IMAGE: &str = "categoryImage";
+    pub const CATEGORY_OTHER: &str = "categoryOther";
+    pub const CATEGORY_PROGRAM: &str = "categoryProgram";
+    pub const CATEGORY_VIDEO: &str = "categoryVideo";
+    pub const COL_ETA: &str = "colEta";
+    pub const COL_FILE_NAME: &str = "colFileName";
+    pub const COL_PROGRESS: &str = "colProgress";
+    pub const COL_SPEED: &str = "colSpeed";
+    pub const COL_STATUS: &str = "colStatus";
+    pub const DELETE: &str = "delete";
+    pub const EMPTY_TITLE: &str = "emptyTitle";
     pub const LANGUAGE: &str = "language";
     pub const LANGUAGE_CHINESE: &str = "languageChinese";
     pub const LANGUAGE_DESC: &str = "languageDesc";
     pub const LANGUAGE_ENGLISH: &str = "languageEnglish";
-    pub const EMPTY_TITLE: &str = "emptyTitle";
+    pub const LATER_QUEUE: &str = "laterQueue";
+    pub const MAIN_QUEUE: &str = "mainQueue";
     pub const MENU_FILE: &str = "menuFile";
     pub const MENU_HELP: &str = "menuHelp";
     pub const MENU_ITEMS_PENDING: &str = "menuItemsPending";
     pub const MENU_TASKS: &str = "menuTasks";
     pub const MENU_TOOLS: &str = "menuTools";
     pub const MOBILE_NAV_DOWNLOADS: &str = "mobileNavDownloads";
-    pub const SETTINGS_CAT_APPEARANCE: &str = "settingsCatAppearance";
+    pub const PAUSE: &str = "pause";
+    pub const RESUME: &str = "resume";
+    pub const NEW_DOWNLOAD: &str = "newDownload";
     pub const SETTINGS: &str = "settings";
+    pub const SETTINGS_CAT_APPEARANCE: &str = "settingsCatAppearance";
+    pub const SIDEBAR_CATEGORY: &str = "sidebarCategory";
+    pub const SIDEBAR_QUEUES: &str = "sidebarQueues";
     pub const SIDEBAR_STATUS: &str = "sidebarStatus";
     pub const STATUS_COMPLETED: &str = "statusCompleted";
     pub const STATUS_DOWNLOADING: &str = "statusDownloading";
+    pub const STATUS_ERROR: &str = "statusError";
+    pub const STATUS_PAUSED: &str = "statusPaused";
+    pub const STATUS_SEEDING: &str = "statusSeeding";
+    pub const STOP_ALL: &str = "stopAll";
+    pub const TAB_ALL: &str = "tabAll";
     pub const THEME_MODE: &str = "themeMode";
     pub const THEME_MODE_DARK: &str = "themeModeDark";
     pub const THEME_MODE_DESC: &str = "themeModeDesc";
     pub const THEME_MODE_LIGHT: &str = "themeModeLight";
+    pub const TODAY: &str = "today";
 }
 
 /// 嵌入翻译资源无法构造成有效目录时的错误。

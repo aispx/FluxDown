@@ -4,9 +4,9 @@ use fluxdown_ui_components::{
 use fluxdown_ui_i18n::Translator;
 use fluxdown_ui_theme::{active_theme, toggle_theme};
 use gpui::{
-    Context, Div, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Render,
-    SharedString, StatefulInteractiveElement as _, Styled, Window, div, img,
-    prelude::FluentBuilder as _, px,
+    AppContext as _, Context, Div, Entity, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement, Render, SharedString, StatefulInteractiveElement as _, Styled, Window, div, img,
+    px,
 };
 use gpui_component::{
     Icon, IconName, TitleBar,
@@ -20,7 +20,8 @@ use gpui_component::{
 
 use crate::{
     assets::{APP_LOGO_PATH, DOWNLOAD_ICON_PATH},
-    strings::ShellStrings,
+    downloads::DownloadView,
+    strings::{DownloadStrings, ShellStrings},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,43 +30,23 @@ enum Activity {
     Settings,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DownloadFilter {
-    All,
-    Downloading,
-    Completed,
-}
-
 pub(crate) struct ShellView {
     translator: Translator,
     strings: ShellStrings,
     active_activity: Activity,
-    selected_filter: DownloadFilter,
+    downloads: Entity<DownloadView>,
 }
 
 impl ShellView {
-    pub(crate) fn new(translator: Translator) -> Self {
+    pub(crate) fn new(translator: Translator, cx: &mut Context<Self>) -> Self {
         let strings = ShellStrings::from_translator(&translator);
+        let downloads =
+            cx.new(|_| DownloadView::new(DownloadStrings::from_translator(&translator)));
         Self {
             translator,
             strings,
             active_activity: Activity::Downloads,
-            selected_filter: DownloadFilter::All,
-        }
-    }
-
-    fn filter_label(&self, filter: DownloadFilter) -> SharedString {
-        match filter {
-            DownloadFilter::All => self.strings.category_all.clone(),
-            DownloadFilter::Downloading => self.strings.status_downloading.clone(),
-            DownloadFilter::Completed => self.strings.status_completed.clone(),
-        }
-    }
-
-    fn content_title(&self) -> SharedString {
-        match self.active_activity {
-            Activity::Downloads => self.filter_label(self.selected_filter),
-            Activity::Settings => self.strings.settings.clone(),
+            downloads,
         }
     }
 
@@ -185,63 +166,6 @@ impl ShellView {
             )))
     }
 
-    fn filter_item(
-        &self,
-        id: &'static str,
-        filter: DownloadFilter,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        navigation_button(
-            id,
-            self.filter_label(filter),
-            self.selected_filter == filter,
-            cx,
-        )
-        .on_click(cx.listener(move |this, _, _, cx| {
-            if this.selected_filter != filter {
-                this.selected_filter = filter;
-                cx.notify();
-            }
-        }))
-    }
-
-    fn sidebar_header(&self, label: SharedString, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens();
-        div()
-            .px(tokens.spacing.sm)
-            .pb(tokens.spacing.xs)
-            .text_size(tokens.typography.xs.size)
-            .font_weight(tokens.typography.xs.weight)
-            .text_color(tokens.colors.muted_foreground)
-            .child(label)
-    }
-
-    fn render_sidebar(&self, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens();
-        let sidebar = v_flex()
-            .size_full()
-            .min_w_0()
-            .p(tokens.spacing.md)
-            .gap(tokens.spacing.sm)
-            .bg(tokens.colors.surface);
-
-        match self.active_activity {
-            Activity::Downloads => sidebar
-                .child(self.sidebar_header(self.strings.sidebar_status.clone(), cx))
-                .child(self.filter_item("nav-all", DownloadFilter::All, cx))
-                .child(self.filter_item("nav-downloading", DownloadFilter::Downloading, cx))
-                .child(self.filter_item("nav-completed", DownloadFilter::Completed, cx)),
-            Activity::Settings => sidebar
-                .child(self.sidebar_header(self.strings.settings.clone(), cx))
-                .child(navigation_button(
-                    "nav-appearance",
-                    self.strings.settings_appearance.clone(),
-                    true,
-                    cx,
-                )),
-        }
-    }
-
     fn render_theme_card(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
         let next_mode = if active_theme(cx).mode().is_dark() {
@@ -322,6 +246,11 @@ impl ShellView {
                             if this.translator.set_locale(next) {
                                 gpui_component::set_locale(component_locale(next));
                                 this.strings = ShellStrings::from_translator(&this.translator);
+                                let download_strings =
+                                    DownloadStrings::from_translator(&this.translator);
+                                this.downloads.update(cx, |downloads, cx| {
+                                    downloads.set_strings(download_strings, cx);
+                                });
                                 cx.notify();
                             }
                         }),
@@ -330,85 +259,74 @@ impl ShellView {
         )
     }
 
-    fn render_content_header(&self, cx: &mut Context<Self>) -> Div {
+    fn render_settings_sidebar(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
-        h_flex()
-            .items_center()
+        v_flex()
+            .size_full()
+            .min_w_0()
+            .p(tokens.spacing.md)
             .gap(tokens.spacing.sm)
+            .bg(tokens.colors.surface)
             .child(
                 div()
-                    .text_size(tokens.typography.xl.size)
-                    .font_weight(tokens.typography.xl.weight)
-                    .child(match self.active_activity {
-                        Activity::Downloads => self.strings.downloads.clone(),
-                        Activity::Settings => self.strings.settings.clone(),
-                    }),
+                    .px(tokens.spacing.sm)
+                    .pb(tokens.spacing.xs)
+                    .text_size(tokens.typography.xs.size)
+                    .font_weight(tokens.typography.xs.weight)
+                    .text_color(tokens.colors.muted_foreground)
+                    .child(self.strings.settings.clone()),
             )
-            .when(self.active_activity == Activity::Downloads, |this| {
-                this.child(
-                    div()
-                        .px(tokens.spacing.sm)
-                        .py(tokens.spacing.xxs)
-                        .rounded(tokens.radius.full)
-                        .bg(tokens.colors.accent)
-                        .text_size(tokens.typography.xs.size)
-                        .text_color(tokens.colors.accent_foreground)
-                        .child(self.filter_label(self.selected_filter)),
-                )
-            })
+            .child(navigation_button(
+                "nav-appearance",
+                self.strings.settings_appearance.clone(),
+                true,
+                cx,
+            ))
     }
 
-    fn render_section_body(&self, cx: &mut Context<Self>) -> Div {
-        let theme = active_theme(cx).tokens();
-        let colors = theme.colors;
-        let spacing = theme.spacing;
-        let typography = theme.typography.clone();
-
-        if self.active_activity == Activity::Settings {
-            h_flex()
-                .items_stretch()
-                .gap(spacing.lg)
-                .child(self.render_theme_card(cx))
-                .child(self.render_language_card(cx))
-        } else {
-            card(cx)
-                .flex_1()
-                .min_h(px(240.))
-                .p(spacing.xl)
-                .flex()
-                .items_center()
-                .justify_center()
+    fn render_settings(&self, cx: &mut Context<Self>) -> Div {
+        let tokens = active_theme(cx).tokens().clone();
+        div().size_full().min_w_0().min_h_0().child(
+            h_resizable("settings-content")
                 .child(
-                    v_flex()
-                        .items_center()
-                        .gap(spacing.xs)
-                        .child(
-                            Icon::new(IconName::Inbox)
-                                .size(px(32.))
-                                .text_color(colors.muted_foreground),
-                        )
-                        .child(
-                            div()
-                                .text_size(typography.lg.size)
-                                .font_weight(typography.lg.weight)
-                                .child(self.strings.empty_title.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_size(typography.sm.size)
-                                .text_color(colors.muted_foreground)
-                                .child(self.content_title()),
-                        ),
+                    resizable_panel()
+                        .size(px(232.))
+                        .size_range(px(184.)..px(360.))
+                        .child(self.render_settings_sidebar(cx)),
                 )
-        }
+                .child(
+                    resizable_panel().child(
+                        v_flex()
+                            .size_full()
+                            .min_w_0()
+                            .p(tokens.spacing.xl)
+                            .gap(tokens.spacing.lg)
+                            .child(
+                                div()
+                                    .text_size(tokens.typography.xl.size)
+                                    .font_weight(tokens.typography.xl.weight)
+                                    .child(self.strings.settings.clone()),
+                            )
+                            .child(
+                                h_flex()
+                                    .items_stretch()
+                                    .gap(tokens.spacing.lg)
+                                    .child(self.render_theme_card(cx))
+                                    .child(self.render_language_card(cx)),
+                            ),
+                    ),
+                ),
+        )
     }
 }
 
 impl Render for ShellView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = active_theme(cx).tokens();
-        let colors = theme.colors;
-        let spacing = theme.spacing;
+        let colors = active_theme(cx).tokens().colors;
+        let content = match self.active_activity {
+            Activity::Downloads => self.downloads.clone().into_any_element(),
+            Activity::Settings => self.render_settings(cx).into_any_element(),
+        };
 
         v_flex()
             .size_full()
@@ -421,28 +339,7 @@ impl Render for ShellView {
                     .min_h_0()
                     .items_stretch()
                     .child(self.render_activity_bar(cx))
-                    .child(
-                        div().h_full().flex_1().min_w_0().min_h_0().child(
-                            h_resizable("shell-content")
-                                .child(
-                                    resizable_panel()
-                                        .size(px(232.))
-                                        .size_range(px(184.)..px(360.))
-                                        .child(self.render_sidebar(cx)),
-                                )
-                                .child(
-                                    resizable_panel().child(
-                                        v_flex()
-                                            .size_full()
-                                            .min_w_0()
-                                            .p(spacing.xl)
-                                            .gap(spacing.lg)
-                                            .child(self.render_content_header(cx))
-                                            .child(self.render_section_body(cx)),
-                                    ),
-                                ),
-                        ),
-                    ),
+                    .child(div().h_full().flex_1().min_w_0().min_h_0().child(content)),
             )
     }
 }

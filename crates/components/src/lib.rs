@@ -52,6 +52,76 @@ pub fn button(
         .accessibility_label(label.clone())
         .child(label)
 }
+/// 创建带前置图标的主要操作按钮。
+pub fn primary_icon_button(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    icon: impl IntoElement,
+    cx: &App,
+) -> Button {
+    let tokens = active_theme(cx).tokens();
+    let label = label.into();
+    let palette = ButtonPalette::for_variant(ButtonVariant::Primary, tokens.colors);
+
+    Button::new(id)
+        .h(px(32.))
+        .px(tokens.spacing.md)
+        .line_height(relative(1.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .rounded(tokens.radius.md)
+        .border_1()
+        .border_color(palette.border)
+        .bg(palette.background)
+        .text_color(palette.foreground)
+        .text_size(tokens.typography.sm.size)
+        .font_weight(tokens.typography.sm.weight)
+        .hover(move |style| style.bg(palette.hover))
+        .active(move |style| style.bg(palette.active))
+        .focus_visible(move |style| style.border_color(tokens.colors.ring))
+        .accessibility_label(label.clone())
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(tokens.spacing.sm)
+                .child(icon)
+                .child(label),
+        )
+}
+
+/// 创建任务列表工具栏的紧凑图标操作按钮。
+pub fn toolbar_action_button(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    icon: impl IntoElement,
+    destructive: bool,
+    cx: &App,
+) -> Button {
+    let tokens = active_theme(cx).tokens();
+    let foreground = if destructive {
+        tokens.colors.destructive
+    } else {
+        tokens.colors.muted_foreground
+    };
+
+    Button::new(id)
+        .size(px(30.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .rounded(tokens.radius.md)
+        .bg(transparent(tokens.colors.muted))
+        .text_color(foreground)
+        .hover(move |style| style.bg(tokens.colors.muted))
+        .active(move |style| style.bg(tokens.colors.secondary))
+        .focus_visible(move |style| style.bg(tokens.colors.muted))
+        .accessibility_label(label)
+        .child(icon)
+}
 
 /// 创建侧栏导航按钮；选中态由调用方控制。
 pub fn navigation_button(
@@ -72,6 +142,60 @@ pub fn navigation_button(
                     .text_color(tokens.colors.accent_foreground)
             })
         })
+}
+/// 创建带图标与尾部信息的侧栏导航按钮。
+pub fn sidebar_navigation_button(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    icon: impl IntoElement,
+    trailing: impl IntoElement,
+    selected: bool,
+    cx: &App,
+) -> Button {
+    let tokens = active_theme(cx).tokens();
+    let label = label.into();
+    let hover_background = if selected {
+        tokens.colors.accent
+    } else {
+        tokens.colors.muted
+    };
+
+    Button::new(id)
+        .h(px(32.))
+        .w_full()
+        .px(tokens.spacing.sm)
+        .line_height(relative(1.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .cursor_pointer()
+        .rounded(tokens.radius.md)
+        .bg(transparent(tokens.colors.muted))
+        .text_color(tokens.colors.muted_foreground)
+        .text_size(tokens.typography.sm.size)
+        .font_weight(tokens.typography.sm.weight)
+        .hover(move |style| style.bg(hover_background))
+        .active(move |style| style.bg(hover_background))
+        .focus_visible(move |style| style.bg(hover_background))
+        .selected(selected)
+        .styles(|styles| {
+            styles.selected(|style| {
+                style
+                    .bg(tokens.colors.accent)
+                    .text_color(tokens.colors.accent_foreground)
+            })
+        })
+        .accessibility_label(label.clone())
+        .child(
+            div()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap(tokens.spacing.sm)
+                .child(icon)
+                .child(div().truncate().child(label)),
+        )
+        .child(trailing)
 }
 
 /// 创建活动栏按钮。
