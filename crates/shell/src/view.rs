@@ -95,7 +95,6 @@ impl ShellAction {
 pub struct AuxiliaryWindowView {
     _translator: Entity<Translator>,
     title: SharedString,
-    window_title_dirty: bool,
     content: AnyView,
 }
 
@@ -110,14 +109,12 @@ impl AuxiliaryWindowView {
         let title = SharedString::from(translator.read(cx).text(title_key).to_owned());
         cx.observe(&translator, move |this, translator, cx| {
             this.title = SharedString::from(translator.read(cx).text(title_key).to_owned());
-            this.window_title_dirty = true;
             cx.notify();
         })
         .detach();
         Self {
             _translator: translator,
             title,
-            window_title_dirty: true,
             content,
         }
     }
@@ -155,11 +152,7 @@ impl AuxiliaryWindowView {
 }
 
 impl Render for AuxiliaryWindowView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.window_title_dirty {
-            window.set_window_title(self.title.as_ref());
-            self.window_title_dirty = false;
-        }
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = active_theme(cx).tokens().colors;
         v_flex()
             .size_full()
