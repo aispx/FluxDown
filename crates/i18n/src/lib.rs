@@ -28,6 +28,8 @@ pub mod keys {
     pub const MENU_ITEMS_PENDING: &str = "menuItemsPending";
     pub const MENU_TASKS: &str = "menuTasks";
     pub const MENU_TOOLS: &str = "menuTools";
+    pub const MOBILE_NAV_DOWNLOADS: &str = "mobileNavDownloads";
+    pub const SETTINGS_CAT_APPEARANCE: &str = "settingsCatAppearance";
     pub const SETTINGS: &str = "settings";
     pub const SIDEBAR_STATUS: &str = "sidebarStatus";
     pub const STATUS_COMPLETED: &str = "statusCompleted";

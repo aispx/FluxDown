@@ -5,8 +5,8 @@
 
 use fluxdown_ui_theme::active_theme;
 use gpui::{
-    App, Div, ElementId, Hsla, InteractiveElement, ParentElement, SharedString,
-    StatefulInteractiveElement as _, Styled, div, relative,
+    App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
+    StatefulInteractiveElement as _, Styled, div, px, relative,
 };
 use gpui_base::Button;
 
@@ -37,6 +37,7 @@ pub fn button(
         .flex()
         .items_center()
         .justify_center()
+        .cursor_pointer()
         .rounded(tokens.radius.md)
         .border_1()
         .border_color(palette.border)
@@ -71,6 +72,45 @@ pub fn navigation_button(
                     .text_color(tokens.colors.accent_foreground)
             })
         })
+}
+
+/// 创建活动栏按钮。
+///
+/// 选中态使用淡蓝色强调背景；未选中项仅在悬浮时显示中性灰背景。
+pub fn activity_button(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    icon: impl IntoElement,
+    selected: bool,
+    cx: &App,
+) -> Button {
+    let tokens = active_theme(cx).tokens();
+    let colors = tokens.colors;
+    let selected_foreground = colors.accent_foreground;
+    let hover_background = if selected {
+        colors.accent
+    } else {
+        colors.muted
+    };
+
+    Button::new(id)
+        .size(px(40.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .rounded(tokens.radius.lg)
+        .bg(transparent(colors.muted))
+        .text_color(colors.muted_foreground)
+        .hover(move |style| style.bg(hover_background))
+        .active(move |style| style.bg(hover_background))
+        .focus_visible(move |style| style.bg(hover_background))
+        .selected(selected)
+        .styles(|styles| {
+            styles.selected(|style| style.bg(colors.accent).text_color(selected_foreground))
+        })
+        .accessibility_label(label)
+        .child(icon)
 }
 
 /// 创建使用 surface、border、radius 与 shadow token 的基础卡片。
