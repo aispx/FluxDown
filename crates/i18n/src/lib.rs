@@ -25,9 +25,10 @@ pub mod keys {
     pub const CATEGORY_OTHER: &str = "categoryOther";
     pub const CATEGORY_PROGRAM: &str = "categoryProgram";
     pub const CATEGORY_VIDEO: &str = "categoryVideo";
+    pub const COL_CREATED: &str = "colCreated";
     pub const COL_ETA: &str = "colEta";
     pub const COL_FILE_NAME: &str = "colFileName";
-    pub const COL_PROGRESS: &str = "colProgress";
+    pub const COL_SIZE: &str = "colSize";
     pub const COL_SPEED: &str = "colSpeed";
     pub const COL_STATUS: &str = "colStatus";
     pub const DELETE: &str = "delete";

@@ -1,21 +1,22 @@
-use std::rc::Rc;
+use std::{collections::HashSet, rc::Rc};
 
-use gpui::{Context, IntoElement, ParentElement, Render, Styled, Window, div, px, size};
-use gpui_component::{VirtualListScrollHandle, h_resizable, resizable_panel};
+use gpui::{
+    AppContext as _, Context, Entity, IntoElement, Modifiers, ParentElement, Render, Styled,
+    Window, div, px, size,
+};
+use gpui_component::{ResizableState, VirtualListScrollHandle, h_resizable, resizable_panel};
 mod sidebar;
 mod task_list;
 
 use crate::strings::DownloadStrings;
 
-const PROGRESS_COLUMN_WIDTH: f32 = 150.;
-const SPEED_COLUMN_WIDTH: f32 = 90.;
-const ETA_COLUMN_WIDTH: f32 = 84.;
-const STATUS_COLUMN_WIDTH: f32 = 88.;
-const GROUP_ROW_HEIGHT: f32 = 32.;
-const TRAILING_COLUMNS_WIDTH: f32 =
-    PROGRESS_COLUMN_WIDTH + SPEED_COLUMN_WIDTH + ETA_COLUMN_WIDTH + STATUS_COLUMN_WIDTH + 14.;
-
-const TASK_ROW_HEIGHT: f32 = 64.;
+const SIZE_COLUMN_WIDTH: f32 = 72.;
+const STATUS_COLUMN_WIDTH: f32 = 118.;
+const SPEED_COLUMN_WIDTH: f32 = 82.;
+const ETA_COLUMN_WIDTH: f32 = 98.;
+const CREATED_COLUMN_WIDTH: f32 = 100.;
+const SELECTION_COLUMN_WIDTH: f32 = 28.;
+const TASK_ROW_HEIGHT: f32 = 38.;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SidebarItem {
@@ -57,101 +58,99 @@ enum TaskKind {
 
 #[derive(Clone, Copy)]
 struct TaskPreview {
+    id: usize,
     name: &'static str,
     size: &'static str,
-    protocol: &'static str,
-    progress: f32,
     kind: TaskKind,
+    progress: f32,
     progress_label: &'static str,
     state: TaskState,
-}
-
-#[derive(Clone, Copy)]
-enum ListItem {
-    Group,
-    Task(TaskPreview),
 }
 
 pub(crate) struct DownloadView {
     strings: DownloadStrings,
     selected_item: SidebarItem,
+    selected_tasks: HashSet<usize>,
+    selection_anchor: Option<usize>,
     status_expanded: bool,
     queues_expanded: bool,
     categories_expanded: bool,
-    items: Vec<ListItem>,
+    items: Vec<TaskPreview>,
     item_sizes: Rc<Vec<gpui::Size<gpui::Pixels>>>,
     scroll_handle: VirtualListScrollHandle,
+    resizable_state: Entity<ResizableState>,
+    resizable_state_initialized: bool,
 }
 
 impl DownloadView {
-    pub(crate) fn new(strings: DownloadStrings) -> Self {
+    pub(crate) fn new(strings: DownloadStrings, cx: &mut Context<Self>) -> Self {
         let items = vec![
-            ListItem::Group,
-            ListItem::Task(TaskPreview {
+            TaskPreview {
+                id: 0,
                 name: "rufus-4.15.exe",
                 size: "1.9 MB",
-                protocol: "HTTP",
                 kind: TaskKind::Application,
                 progress: 1.,
                 progress_label: "100.0%",
                 state: TaskState::Completed,
-            }),
-            ListItem::Task(TaskPreview {
+            },
+            TaskPreview {
+                id: 1,
                 name: "cachyos-desktop-linux-260809.iso",
                 size: "3.0 GB",
-                protocol: "HTTP",
                 progress: 1.,
                 kind: TaskKind::DiskImage,
                 progress_label: "100.0%",
                 state: TaskState::Completed,
-            }),
-            ListItem::Task(TaskPreview {
+            },
+            TaskPreview {
+                id: 2,
                 name: "Gopeed-v1.9.3-android-x86_64.apk",
                 size: "25.4 MB",
-                protocol: "HTTP",
                 progress: 1.,
                 progress_label: "100.0%",
                 kind: TaskKind::Mobile,
                 state: TaskState::Completed,
-            }),
-            ListItem::Task(TaskPreview {
+            },
+            TaskPreview {
+                id: 3,
                 name: "Gopeed-v1.9.3-macos-amd64.dmg",
                 size: "39.0 MB",
-                protocol: "HTTP",
                 progress: 0.666,
                 progress_label: "66.6%",
                 state: TaskState::Paused,
                 kind: TaskKind::DiskImage,
-            }),
-            ListItem::Task(TaskPreview {
+            },
+            TaskPreview {
+                id: 4,
                 name: "Gopeed-v1.9.3-windows-amd64.exe",
                 size: "25.2 MB",
-                protocol: "HTTP",
                 progress: 0.718,
                 progress_label: "71.8%",
                 state: TaskState::Paused,
                 kind: TaskKind::Application,
-            }),
+            },
         ];
         let item_sizes = Rc::new(
             items
                 .iter()
-                .map(|item| match item {
-                    ListItem::Group => size(px(1.), px(GROUP_ROW_HEIGHT)),
-                    ListItem::Task(_) => size(px(1.), px(TASK_ROW_HEIGHT)),
-                })
+                .map(|_| size(px(1.), px(TASK_ROW_HEIGHT)))
                 .collect(),
         );
 
         Self {
             strings,
             selected_item: SidebarItem::All,
+            selected_tasks: HashSet::new(),
+            selection_anchor: None,
             status_expanded: true,
             queues_expanded: true,
             categories_expanded: true,
             items,
             item_sizes,
             scroll_handle: VirtualListScrollHandle::new(),
+            resizable_state: cx.new(|_| ResizableState::default()),
+            resizable_state_initialized: false,
         }
     }
 
@@ -159,16 +158,61 @@ impl DownloadView {
         self.strings = strings;
         cx.notify();
     }
+
+    fn select_task(&mut self, task_id: usize, modifiers: Modifiers) {
+        if modifiers.shift
+            && let Some(anchor) = self.selection_anchor
+            && let Some(anchor_index) = self.items.iter().position(|task| task.id == anchor)
+            && let Some(task_index) = self.items.iter().position(|task| task.id == task_id)
+        {
+            let (start, end) = if anchor_index <= task_index {
+                (anchor_index, task_index)
+            } else {
+                (task_index, anchor_index)
+            };
+            self.selected_tasks.clear();
+            self.selected_tasks
+                .extend(self.items[start..=end].iter().map(|task| task.id));
+            return;
+        }
+
+        if modifiers.secondary() {
+            if !self.selected_tasks.remove(&task_id) {
+                self.selected_tasks.insert(task_id);
+            }
+        } else {
+            self.selected_tasks.clear();
+            self.selected_tasks.insert(task_id);
+        }
+        self.selection_anchor = Some(task_id);
+    }
 }
 
 impl Render for DownloadView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let main_panel_measured = self
+            .resizable_state
+            .read(cx)
+            .sizes()
+            .get(1)
+            .is_some_and(|size| *size > px(1.));
+        if !self.resizable_state_initialized && main_panel_measured {
+            self.resizable_state
+                .update(cx, |state, cx| state.reset_panel(1, cx));
+            self.resizable_state_initialized = true;
+        }
+
         div().size_full().min_w_0().min_h_0().child(
             h_resizable("downloads-content")
+                .with_state(&self.resizable_state)
+                .on_resize(|state, _, cx| {
+                    state.update(cx, |state, cx| state.reset_panel(1, cx));
+                })
                 .child(
                     resizable_panel()
-                        .size(px(204.))
-                        .size_range(px(184.)..px(320.))
+                        .size(px(160.))
+                        .flex_none()
+                        .size_range(px(148.)..px(280.))
                         .child(self.render_sidebar(cx)),
                 )
                 .child(resizable_panel().child(self.render_main(cx))),

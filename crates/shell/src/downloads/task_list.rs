@@ -1,91 +1,126 @@
 use fluxdown_ui_components::{primary_icon_button, toolbar_action_button};
 use fluxdown_ui_theme::active_theme;
 use gpui::{
-    Context, Div, InteractiveElement as _, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
+    Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement,
+    SharedString, StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
+    relative,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, h_flex,
+    ActiveTheme as _, FocusableExt as _, Icon, IconName, Sizable as _, Size,
+    checkbox::Checkbox,
+    h_flex,
     scroll::{Scrollbar, ScrollbarMode},
     tooltip::Tooltip,
     v_flex, v_virtual_list,
 };
 
 use super::{
-    DownloadView, ETA_COLUMN_WIDTH, GROUP_ROW_HEIGHT, ListItem, PROGRESS_COLUMN_WIDTH,
-    SPEED_COLUMN_WIDTH, STATUS_COLUMN_WIDTH, TASK_ROW_HEIGHT, TRAILING_COLUMNS_WIDTH, TaskKind,
+    CREATED_COLUMN_WIDTH, DownloadView, ETA_COLUMN_WIDTH, SELECTION_COLUMN_WIDTH,
+    SIZE_COLUMN_WIDTH, SPEED_COLUMN_WIDTH, STATUS_COLUMN_WIDTH, TASK_ROW_HEIGHT, TaskKind,
     TaskPreview, TaskState,
 };
 
 impl DownloadView {
     fn column_label(&self, label: SharedString, width: f32, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
-        div()
+        h_flex()
             .w(px(width))
             .flex_none()
+            .items_center()
             .text_size(tokens.typography.xs.size)
             .text_color(tokens.colors.muted_foreground)
+            .child(
+                div()
+                    .h(px(16.))
+                    .w(px(1.))
+                    .mr(tokens.spacing.sm)
+                    .bg(tokens.colors.border),
+            )
             .child(label)
     }
 
     fn render_table_header(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
+        let all_tasks_selected = !self.items.is_empty()
+            && self
+                .items
+                .iter()
+                .all(|task| self.selected_tasks.contains(&task.id));
+
         h_flex()
-            .h(px(36.))
-            .w_full()
+            .h(px(34.))
+            .mx(px(4.))
             .flex_none()
             .items_center()
             .px(tokens.spacing.lg)
-            .border_b_1()
-            .border_color(tokens.colors.border)
+            .rounded(tokens.radius.md)
+            .overflow_hidden()
+            .bg(tokens.colors.muted)
+            .child(
+                h_flex()
+                    .w(px(SELECTION_COLUMN_WIDTH))
+                    .flex_none()
+                    .items_center()
+                    .child(
+                        Checkbox::new("select-all-download-tasks")
+                            .with_size(Size::XSmall)
+                            .checked(all_tasks_selected)
+                            .focus_ring(false)
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                if *checked {
+                                    for task in &this.items {
+                                        this.selected_tasks.insert(task.id);
+                                    }
+                                } else {
+                                    this.selected_tasks.clear();
+                                }
+                                this.selection_anchor = None;
+                                cx.notify();
+                            })),
+                    ),
+            )
             .child(
                 div()
-                    .min_w(px(240.))
-                    .flex_1()
+                    .w(px(188.))
+                    .min_w(px(140.))
+                    .max_w(px(188.))
                     .text_size(tokens.typography.xs.size)
                     .text_color(tokens.colors.muted_foreground)
                     .child(self.strings.col_file_name.clone()),
             )
-            .child(self.column_label(self.strings.col_progress.clone(), PROGRESS_COLUMN_WIDTH, cx))
+            .child(self.column_label(self.strings.col_size.clone(), SIZE_COLUMN_WIDTH, cx))
+            .child(self.column_label(self.strings.col_status.clone(), STATUS_COLUMN_WIDTH, cx))
             .child(self.column_label(self.strings.col_speed.clone(), SPEED_COLUMN_WIDTH, cx))
             .child(self.column_label(self.strings.col_eta.clone(), ETA_COLUMN_WIDTH, cx))
-            .child(self.column_label(self.strings.col_status.clone(), STATUS_COLUMN_WIDTH, cx))
-            .child(Icon::new(IconName::Ellipsis).size(px(14.)))
+            .child(self.column_label(self.strings.col_created.clone(), CREATED_COLUMN_WIDTH, cx))
     }
 
-    fn render_group_row(&self, cx: &mut Context<Self>) -> Div {
+    fn render_status(
+        &self,
+        task: TaskPreview,
+        status: SharedString,
+        color: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let tokens = active_theme(cx).tokens();
-        h_flex()
-            .h(px(GROUP_ROW_HEIGHT))
-            .w_full()
+        v_flex()
+            .w(px(STATUS_COLUMN_WIDTH))
             .flex_none()
-            .items_center()
-            .px(tokens.spacing.lg)
-            .gap(tokens.spacing.xs)
-            .border_b_1()
-            .border_color(tokens.colors.border)
-            .text_size(tokens.typography.xs.size)
-            .text_color(tokens.colors.muted_foreground)
-            .child(Icon::new(IconName::ChevronDown).size(px(12.)))
-            .child(self.strings.today.clone())
-            .child("5")
-            .child(div().flex_1())
-            .child("3.1 GB")
-            .child(div().w(px(TRAILING_COLUMNS_WIDTH)).flex_none())
-    }
-
-    fn render_progress(&self, task: TaskPreview, color: gpui::Hsla, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens();
-        h_flex()
-            .w(px(PROGRESS_COLUMN_WIDTH))
-            .flex_none()
-            .items_center()
-            .gap(tokens.spacing.sm)
+            .gap(px(2.))
+            .child(
+                h_flex()
+                    .gap(tokens.spacing.xs)
+                    .text_size(tokens.typography.xs.size)
+                    .line_height(relative(1.))
+                    .font_weight(tokens.typography.xs.weight)
+                    .child(task.progress_label)
+                    .child(status),
+            )
             .child(
                 div()
                     .relative()
-                    .h(px(3.))
-                    .w(px(86.))
+                    .h(px(4.))
+                    .w(px(110.))
                     .overflow_hidden()
                     .rounded_full()
                     .bg(tokens.colors.muted)
@@ -97,32 +132,37 @@ impl DownloadView {
                             .bg(color),
                     ),
             )
-            .child(
-                div()
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child(task.progress_label),
-            )
     }
 
     fn render_task_row(&self, task: TaskPreview, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens().clone();
-        let (status, status_icon, status_color) = match task.state {
-            TaskState::Completed => (
-                self.strings.status_completed.clone(),
-                IconName::CircleCheck,
-                cx.theme().success,
-            ),
-            TaskState::Paused => (
-                self.strings.status_paused.clone(),
-                IconName::Pause,
-                cx.theme().warning,
-            ),
+        let task_id = task.id;
+        let selected = self.selected_tasks.contains(&task_id);
+        let hover_background = if selected {
+            tokens.colors.accent
+        } else {
+            tokens.colors.muted
         };
-        let (file_icon, file_icon_color) = match task.kind {
-            TaskKind::Application => (IconName::HardDrive, tokens.colors.muted_foreground),
-            TaskKind::DiskImage => (IconName::Inbox, cx.theme().warning),
-            TaskKind::Mobile => (IconName::MemoryStick, tokens.colors.muted_foreground),
+        let (status, status_color) = match task.state {
+            TaskState::Completed => (self.strings.status_completed.clone(), cx.theme().success),
+            TaskState::Paused => (self.strings.status_paused.clone(), cx.theme().warning),
+        };
+        let (file_icon, file_icon_color, category) = match task.kind {
+            TaskKind::Application => (
+                IconName::HardDrive,
+                tokens.colors.muted_foreground,
+                self.strings.category_program.clone(),
+            ),
+            TaskKind::Mobile => (
+                IconName::MemoryStick,
+                tokens.colors.muted_foreground,
+                self.strings.category_program.clone(),
+            ),
+            TaskKind::DiskImage => (
+                IconName::Inbox,
+                cx.theme().warning,
+                self.strings.category_archive.clone(),
+            ),
         };
 
         h_flex()
@@ -131,67 +171,83 @@ impl DownloadView {
             .flex_none()
             .items_center()
             .px(tokens.spacing.lg)
-            .border_b_1()
-            .border_color(tokens.colors.border)
-            .hover(|style| style.bg(tokens.colors.muted))
+            .rounded(tokens.radius.sm)
+            .cursor_pointer()
+            .when(selected, |this| this.bg(tokens.colors.accent))
+            .hover(|style| style.bg(hover_background))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.select_task(task_id, event.modifiers);
+                    cx.notify();
+                }),
+            )
             .child(
                 h_flex()
-                    .min_w(px(240.))
-                    .flex_1()
-                    .min_w_0()
-                    .gap(tokens.spacing.md)
+                    .id(("download-task-multi-select-slot", task_id))
+                    .w(px(SELECTION_COLUMN_WIDTH))
+                    .flex_none()
+                    .items_center()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(
+                        Checkbox::new(("download-task-multi-select", task_id))
+                            .with_size(Size::XSmall)
+                            .checked(selected)
+                            .focus_ring(false)
+                            .on_click(cx.listener(move |this, checked: &bool, _, cx| {
+                                if *checked {
+                                    this.selected_tasks.insert(task_id);
+                                } else {
+                                    this.selected_tasks.remove(&task_id);
+                                }
+                                this.selection_anchor = Some(task_id);
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .w(px(188.))
+                    .min_w(px(140.))
+                    .max_w(px(188.))
+                    .gap(tokens.spacing.sm)
                     .child(
                         div()
-                            .size(px(34.))
                             .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(tokens.radius.md)
-                            .bg(tokens.colors.muted)
                             .text_color(file_icon_color)
-                            .child(Icon::new(file_icon).size(px(16.))),
+                            .child(Icon::new(file_icon).size(px(14.))),
                     )
                     .child(
                         v_flex()
                             .min_w_0()
-                            .gap(tokens.spacing.xxs)
+                            .gap(px(1.))
                             .child(
-                                h_flex()
+                                div()
                                     .min_w_0()
-                                    .gap(tokens.spacing.xs)
-                                    .child(
-                                        div()
-                                            .min_w_0()
-                                            .truncate()
-                                            .text_size(tokens.typography.sm.size)
-                                            .font_weight(tokens.typography.sm.weight)
-                                            .child(task.name),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_none()
-                                            .px(tokens.spacing.xs)
-                                            .rounded(tokens.radius.sm)
-                                            .bg(tokens.colors.muted)
-                                            .text_size(tokens.typography.xs.size)
-                                            .text_color(tokens.colors.muted_foreground)
-                                            .child(task.protocol),
-                                    ),
+                                    .truncate()
+                                    .text_size(px(12.))
+                                    .line_height(relative(1.))
+                                    .font_weight(tokens.typography.sm.weight)
+                                    .child(task.name),
                             )
                             .child(
-                                h_flex()
-                                    .gap(tokens.spacing.xs)
-                                    .text_size(tokens.typography.xs.size)
+                                div()
+                                    .text_size(px(8.))
+                                    .line_height(relative(1.))
                                     .text_color(tokens.colors.muted_foreground)
-                                    .child(task.size)
-                                    .when(matches!(task.state, TaskState::Paused), |this| {
-                                        this.child("·").child(status.clone())
-                                    }),
+                                    .child(category),
                             ),
                     ),
             )
-            .child(self.render_progress(task, status_color, cx))
+            .child(
+                div()
+                    .w(px(SIZE_COLUMN_WIDTH))
+                    .flex_none()
+                    .text_size(tokens.typography.xs.size)
+                    .text_color(tokens.colors.muted_foreground)
+                    .child(task.size),
+            )
+            .child(self.render_status(task, status, status_color, cx))
             .child(
                 div()
                     .w(px(SPEED_COLUMN_WIDTH))
@@ -209,31 +265,24 @@ impl DownloadView {
                     .child("—"),
             )
             .child(
-                h_flex()
-                    .w(px(STATUS_COLUMN_WIDTH))
+                div()
+                    .w(px(CREATED_COLUMN_WIDTH))
                     .flex_none()
-                    .items_center()
-                    .gap(tokens.spacing.xs)
                     .text_size(tokens.typography.xs.size)
-                    .font_weight(tokens.typography.xs.weight)
-                    .text_color(status_color)
-                    .child(Icon::new(status_icon).size(px(13.)))
-                    .child(status),
+                    .text_color(tokens.colors.muted_foreground)
+                    .child(self.strings.today.clone()),
             )
-            .child(div().w(px(14.)).flex_none())
     }
 
     fn render_list_item(&self, index: usize, cx: &mut Context<Self>) -> Div {
-        match self.items[index] {
-            ListItem::Group => self.render_group_row(cx),
-            ListItem::Task(task) => self.render_task_row(task, cx),
-        }
+        self.render_task_row(self.items[index], cx)
     }
 
     fn render_task_list(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens();
         div()
             .relative()
+            .mx(px(4.))
             .flex_1()
             .min_h_0()
             .overflow_hidden()
@@ -292,10 +341,9 @@ impl DownloadView {
             .w_full()
             .flex_none()
             .items_center()
-            .px(tokens.spacing.lg)
+            .px(px(4.))
+            .mb(px(4.))
             .gap(tokens.spacing.xxs)
-            .border_b_1()
-            .border_color(tokens.colors.border)
             .child(primary_icon_button(
                 "download-new",
                 self.strings.new_download.clone(),

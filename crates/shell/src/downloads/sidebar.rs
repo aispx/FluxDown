@@ -1,7 +1,7 @@
 use fluxdown_ui_components::sidebar_navigation_button;
 use fluxdown_ui_theme::active_theme;
 use gpui::{
-    Context, Div, InteractiveElement as _, IntoElement, ParentElement, SharedString,
+    Context, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
@@ -20,6 +20,7 @@ impl DownloadView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let tokens = active_theme(cx).tokens();
+        let header_color = tokens.colors.muted_foreground.opacity(0.65);
         let chevron = if expanded {
             IconName::ChevronDown
         } else {
@@ -34,10 +35,14 @@ impl DownloadView {
             .justify_between()
             .cursor_pointer()
             .rounded(tokens.radius.sm)
-            .text_size(tokens.typography.xs.size)
-            .font_weight(tokens.typography.xs.weight)
-            .text_color(tokens.colors.muted_foreground)
-            .hover(|style| style.bg(tokens.colors.muted))
+            .text_size(px(10.5))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(header_color)
+            .hover(|style| {
+                style
+                    .bg(tokens.colors.muted)
+                    .text_color(tokens.colors.muted_foreground)
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 match section {
                     SidebarSection::Status => {
@@ -67,6 +72,12 @@ impl DownloadView {
     ) -> impl IntoElement {
         let (count, show_dot) = trailing;
         let tokens = active_theme(cx).tokens();
+        let selected = self.selected_item == item;
+        let count_color = if selected {
+            tokens.colors.accent_foreground
+        } else {
+            tokens.colors.muted_foreground.opacity(0.65)
+        };
         let dot_color = if item == SidebarItem::MainQueue {
             cx.theme().success
         } else {
@@ -83,7 +94,8 @@ impl DownloadView {
                 div()
                     .min_w(px(12.))
                     .text_right()
-                    .text_size(tokens.typography.xs.size)
+                    .text_size(px(11.))
+                    .text_color(count_color)
                     .child(count),
             );
 
@@ -92,7 +104,7 @@ impl DownloadView {
             label,
             Icon::new(icon).size(px(14.)),
             trailing,
-            self.selected_item == item,
+            selected,
             cx,
         )
         .on_click(cx.listener(move |this, _, _, cx| {
@@ -106,11 +118,13 @@ impl DownloadView {
     fn render_status_section(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens().clone();
         v_flex()
-            .px(tokens.spacing.sm)
-            .pt(tokens.spacing.xs)
-            .pb(tokens.spacing.xs)
-            .border_b_1()
+            .mx(tokens.spacing.sm)
+            .mt(tokens.spacing.sm)
+            .px(tokens.spacing.xs)
+            .py(tokens.spacing.xs)
+            .border_1()
             .border_color(tokens.colors.border)
+            .rounded(tokens.radius.md)
             .child(self.section_header(
                 "download-status-toggle",
                 self.strings.sidebar_status.clone(),
@@ -173,11 +187,13 @@ impl DownloadView {
     fn render_queue_section(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens().clone();
         v_flex()
-            .px(tokens.spacing.sm)
-            .pt(tokens.spacing.xs)
-            .pb(tokens.spacing.xs)
-            .border_b_1()
+            .mx(tokens.spacing.sm)
+            .mt(tokens.spacing.sm)
+            .px(tokens.spacing.xs)
+            .py(tokens.spacing.xs)
+            .border_1()
             .border_color(tokens.colors.border)
+            .rounded(tokens.radius.md)
             .child(self.section_header(
                 "download-queue-toggle",
                 self.strings.sidebar_queues.clone(),
@@ -208,9 +224,14 @@ impl DownloadView {
     fn render_category_section(&self, cx: &mut Context<Self>) -> Div {
         let tokens = active_theme(cx).tokens().clone();
         v_flex()
-            .px(tokens.spacing.sm)
-            .pt(tokens.spacing.xs)
-            .pb(tokens.spacing.md)
+            .mx(tokens.spacing.sm)
+            .mt(tokens.spacing.sm)
+            .mb(tokens.spacing.sm)
+            .px(tokens.spacing.xs)
+            .py(tokens.spacing.xs)
+            .border_1()
+            .border_color(tokens.colors.border)
+            .rounded(tokens.radius.md)
             .child(self.section_header(
                 "download-category-toggle",
                 self.strings.sidebar_category.clone(),

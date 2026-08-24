@@ -5,8 +5,8 @@
 
 use fluxdown_ui_theme::active_theme;
 use gpui::{
-    App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement as _, Styled, div, px, relative,
+    App, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement as _, Styled, div, px, relative,
 };
 use gpui_base::Button;
 
@@ -172,8 +172,8 @@ pub fn sidebar_navigation_button(
         .rounded(tokens.radius.md)
         .bg(transparent(tokens.colors.muted))
         .text_color(tokens.colors.muted_foreground)
-        .text_size(tokens.typography.sm.size)
-        .font_weight(tokens.typography.sm.weight)
+        .text_size(px(12.5))
+        .font_weight(FontWeight::NORMAL)
         .hover(move |style| style.bg(hover_background))
         .active(move |style| style.bg(hover_background))
         .focus_visible(move |style| style.bg(hover_background))
@@ -183,6 +183,7 @@ pub fn sidebar_navigation_button(
                 style
                     .bg(tokens.colors.accent)
                     .text_color(tokens.colors.accent_foreground)
+                    .font_weight(FontWeight::MEDIUM)
             })
         })
         .accessibility_label(label.clone())
@@ -218,7 +219,7 @@ pub fn activity_button(
     };
 
     Button::new(id)
-        .size(px(40.))
+        .size(px(32.))
         .flex()
         .items_center()
         .justify_center()

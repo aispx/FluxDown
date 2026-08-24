@@ -41,7 +41,7 @@ impl ShellView {
     pub(crate) fn new(translator: Translator, cx: &mut Context<Self>) -> Self {
         let strings = ShellStrings::from_translator(&translator);
         let downloads =
-            cx.new(|_| DownloadView::new(DownloadStrings::from_translator(&translator)));
+            cx.new(|cx| DownloadView::new(DownloadStrings::from_translator(&translator), cx));
         Self {
             translator,
             strings,
@@ -122,7 +122,8 @@ impl ShellView {
 
         div()
             .id(tooltip_id)
-            .size(px(48.))
+            .w(px(38.))
+            .h(px(48.))
             .flex()
             .items_center()
             .justify_center()
@@ -144,7 +145,7 @@ impl ShellView {
         let bottom_padding = active_theme(cx).tokens().spacing.xs;
         v_flex()
             .h_full()
-            .w(px(48.))
+            .w(px(38.))
             .flex_none()
             .justify_between()
             .bg(colors.surface)
