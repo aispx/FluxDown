@@ -1691,9 +1691,12 @@ class S {
   String get trayExit => _r('trayExit');
 
   // ─────────────────────────────────────────────
-  // macOS 应用菜单栏
+  // 应用菜单与桌面标题栏
   // ─────────────────────────────────────────────
   String get menuFile => _r('menuFile');
+  String get menuItemsPending => _r('menuItemsPending');
+  String get menuTasks => _r('menuTasks');
+  String get menuTools => _r('menuTools');
   String get menuNewDownload => _r('menuNewDownload');
   String get menuCloseWindow => _r('menuCloseWindow');
   String get menuEdit => _r('menuEdit');

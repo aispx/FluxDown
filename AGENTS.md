@@ -125,6 +125,7 @@ git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z   # 触发发布流水�
 - `fluxdown_engine`：零 rinf/Dart/axum 依赖，只经 `EventSink`/`HostSelection` 与宿主解耦。协议/分段/DB/队列/组/插件全在这里。
 - `fluxdown_api`：只依赖 `&dyn ApiHost`，定义 wire 契约 + 路径常量 + HTTP 服务器。零 rinf。
 - `hub`：**唯一**碰 rinf FFI 的 crate（crate 名不可改，rinf 硬编码）。只做信号收发与类型转换，不含协议逻辑；`signal_bridge.rs` 是 `engine::model` ↔ `hub::signals` 的孤儿规则边界。
+- `crates/{i18n,theme,components,shell,app}`：GPUI PC 迁移层，依赖只准 i18n/theme → components → shell → 薄 app；业务能力继续按 capability crate 接入，禁止回堆单体 UI crate。
 - **feature 门控**：`plugins`、`components`（默认关；desktop/server 开，mobile/CLI 关）。**关插件时下载主链路零行为变化**（注入 no-op `PluginManager`）。
 
 **编译期陷阱**
