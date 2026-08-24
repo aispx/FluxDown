@@ -1,21 +1,17 @@
-use std::{collections::HashSet, rc::Rc};
-
 use gpui::{
-    AppContext as _, Context, Entity, IntoElement, Modifiers, ParentElement, Render, Styled,
-    Window, div, px, size,
+    AppContext as _, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled,
+    Window, actions, div, px,
 };
-use gpui_component::{ResizableState, VirtualListScrollHandle, h_resizable, resizable_panel};
+use gpui_component::{ResizableState, h_resizable, resizable_panel, table::TableState};
 mod sidebar;
 mod task_list;
 
+use task_list::DownloadTableDelegate;
+
 use crate::strings::DownloadStrings;
 
-const SIZE_COLUMN_WIDTH: f32 = 72.;
-const STATUS_COLUMN_WIDTH: f32 = 118.;
-const SPEED_COLUMN_WIDTH: f32 = 82.;
-const ETA_COLUMN_WIDTH: f32 = 98.;
-const CREATED_COLUMN_WIDTH: f32 = 100.;
-const SELECTION_COLUMN_WIDTH: f32 = 28.;
+actions!(downloads, [SelectAllTasks]);
+
 const TASK_ROW_HEIGHT: f32 = 38.;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,7 +40,7 @@ enum SidebarSection {
     Categories,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum TaskState {
     Completed,
     Paused,
@@ -61,6 +57,10 @@ struct TaskPreview {
     id: usize,
     name: &'static str,
     size: &'static str,
+    size_bytes: u64,
+    speed_bytes_per_second: Option<u64>,
+    eta_seconds: Option<u64>,
+    created_order: u32,
     kind: TaskKind,
     progress: f32,
     progress_label: &'static str,
@@ -70,25 +70,30 @@ struct TaskPreview {
 pub(crate) struct DownloadView {
     strings: DownloadStrings,
     selected_item: SidebarItem,
-    selected_tasks: HashSet<usize>,
-    selection_anchor: Option<usize>,
     status_expanded: bool,
     queues_expanded: bool,
     categories_expanded: bool,
-    items: Vec<TaskPreview>,
-    item_sizes: Rc<Vec<gpui::Size<gpui::Pixels>>>,
-    scroll_handle: VirtualListScrollHandle,
+    table_state: Entity<TableState<DownloadTableDelegate>>,
     resizable_state: Entity<ResizableState>,
     resizable_state_initialized: bool,
 }
 
 impl DownloadView {
-    pub(crate) fn new(strings: DownloadStrings, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        strings: DownloadStrings,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        cx.bind_keys([KeyBinding::new("ctrl-a", SelectAllTasks, Some("DataTable"))]);
         let items = vec![
             TaskPreview {
                 id: 0,
                 name: "rufus-4.15.exe",
                 size: "1.9 MB",
+                size_bytes: 1_900_000,
+                speed_bytes_per_second: None,
+                eta_seconds: None,
+                created_order: 0,
                 kind: TaskKind::Application,
                 progress: 1.,
                 progress_label: "100.0%",
@@ -98,6 +103,10 @@ impl DownloadView {
                 id: 1,
                 name: "cachyos-desktop-linux-260809.iso",
                 size: "3.0 GB",
+                size_bytes: 3_000_000_000,
+                speed_bytes_per_second: None,
+                eta_seconds: None,
+                created_order: 1,
                 progress: 1.,
                 kind: TaskKind::DiskImage,
                 progress_label: "100.0%",
@@ -107,6 +116,10 @@ impl DownloadView {
                 id: 2,
                 name: "Gopeed-v1.9.3-android-x86_64.apk",
                 size: "25.4 MB",
+                size_bytes: 25_400_000,
+                speed_bytes_per_second: None,
+                eta_seconds: None,
+                created_order: 2,
                 progress: 1.,
                 progress_label: "100.0%",
                 kind: TaskKind::Mobile,
@@ -116,6 +129,10 @@ impl DownloadView {
                 id: 3,
                 name: "Gopeed-v1.9.3-macos-amd64.dmg",
                 size: "39.0 MB",
+                size_bytes: 39_000_000,
+                speed_bytes_per_second: None,
+                eta_seconds: None,
+                created_order: 3,
                 progress: 0.666,
                 progress_label: "66.6%",
                 state: TaskState::Paused,
@@ -125,66 +142,45 @@ impl DownloadView {
                 id: 4,
                 name: "Gopeed-v1.9.3-windows-amd64.exe",
                 size: "25.2 MB",
+                size_bytes: 25_200_000,
+                speed_bytes_per_second: None,
+                eta_seconds: None,
+                created_order: 4,
                 progress: 0.718,
                 progress_label: "71.8%",
                 state: TaskState::Paused,
                 kind: TaskKind::Application,
             },
         ];
-        let item_sizes = Rc::new(
-            items
-                .iter()
-                .map(|_| size(px(1.), px(TASK_ROW_HEIGHT)))
-                .collect(),
-        );
+        let table_state = cx.new(|cx| {
+            TableState::new(
+                DownloadTableDelegate::new(strings.clone(), items),
+                window,
+                cx,
+            )
+            .row_selectable(false)
+            .col_selectable(false)
+        });
 
         Self {
             strings,
             selected_item: SidebarItem::All,
-            selected_tasks: HashSet::new(),
-            selection_anchor: None,
             status_expanded: true,
             queues_expanded: true,
             categories_expanded: true,
-            items,
-            item_sizes,
-            scroll_handle: VirtualListScrollHandle::new(),
+            table_state,
             resizable_state: cx.new(|_| ResizableState::default()),
             resizable_state_initialized: false,
         }
     }
 
     pub(crate) fn set_strings(&mut self, strings: DownloadStrings, cx: &mut Context<Self>) {
-        self.strings = strings;
+        self.strings = strings.clone();
+        self.table_state.update(cx, |table, cx| {
+            table.delegate_mut().set_strings(strings);
+            table.refresh(cx);
+        });
         cx.notify();
-    }
-
-    fn select_task(&mut self, task_id: usize, modifiers: Modifiers) {
-        if modifiers.shift
-            && let Some(anchor) = self.selection_anchor
-            && let Some(anchor_index) = self.items.iter().position(|task| task.id == anchor)
-            && let Some(task_index) = self.items.iter().position(|task| task.id == task_id)
-        {
-            let (start, end) = if anchor_index <= task_index {
-                (anchor_index, task_index)
-            } else {
-                (task_index, anchor_index)
-            };
-            self.selected_tasks.clear();
-            self.selected_tasks
-                .extend(self.items[start..=end].iter().map(|task| task.id));
-            return;
-        }
-
-        if modifiers.secondary() {
-            if !self.selected_tasks.remove(&task_id) {
-                self.selected_tasks.insert(task_id);
-            }
-        } else {
-            self.selected_tasks.clear();
-            self.selected_tasks.insert(task_id);
-        }
-        self.selection_anchor = Some(task_id);
     }
 }
 

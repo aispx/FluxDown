@@ -9,7 +9,7 @@ use gpui::{
     px,
 };
 use gpui_component::{
-    Icon, IconName, TitleBar,
+    Icon, IconName, Sizable as _, TITLE_BAR_HEIGHT, TitleBar,
     button::{Button, ButtonVariants as _},
     h_flex, h_resizable,
     menu::DropdownMenu as _,
@@ -38,10 +38,10 @@ pub(crate) struct ShellView {
 }
 
 impl ShellView {
-    pub(crate) fn new(translator: Translator, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(translator: Translator, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let strings = ShellStrings::from_translator(&translator);
-        let downloads =
-            cx.new(|cx| DownloadView::new(DownloadStrings::from_translator(&translator), cx));
+        let downloads = cx
+            .new(|cx| DownloadView::new(DownloadStrings::from_translator(&translator), window, cx));
         Self {
             translator,
             strings,
@@ -68,7 +68,7 @@ impl ShellView {
         let title_bar = title_bar.pl(spacing.sm);
 
         title_bar
-            .h(px(40.))
+            .h(TITLE_BAR_HEIGHT)
             .bg(colors.surface)
             .border_color(colors.border)
             .child(
@@ -91,6 +91,7 @@ impl ShellView {
                                 let placeholder = menu_placeholder.clone();
                                 Button::new(id)
                                     .label(label)
+                                    .xsmall()
                                     .text()
                                     .compact()
                                     .h_full()
@@ -142,7 +143,6 @@ impl ShellView {
 
     fn render_activity_bar(&self, cx: &mut Context<Self>) -> Div {
         let colors = active_theme(cx).tokens().colors;
-        let bottom_padding = active_theme(cx).tokens().spacing.xs;
         v_flex()
             .h_full()
             .w(px(38.))
@@ -158,7 +158,7 @@ impl ShellView {
                 self.strings.downloads.clone(),
                 cx,
             ))
-            .child(v_flex().pb(bottom_padding).child(self.activity_button(
+            .child(v_flex().child(self.activity_button(
                 "activity-settings",
                 Activity::Settings,
                 Icon::new(IconName::Settings),

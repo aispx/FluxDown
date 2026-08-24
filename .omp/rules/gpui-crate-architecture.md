@@ -1,10 +1,16 @@
 ---
-description: GPUI 客户端 crate 边界、目录归属、依赖方向与新增 capability 的判定规则
+description: GPUI 客户端 crate 边界、目录归属、依赖方向、本机参考源码与新增 capability 的判定规则
 condition: crates/**
 interruptMode: never
 ---
 
 你正在修改 FluxDown GPUI 客户端。目录结构必须表达职责边界，避免把迁移后的客户端重新堆成单一 UI crate。
+
+## 本机参考源码
+
+- `~/Desktop/code/github/gpui-component`：组件 API、主题 token、交互状态和组合示例的首选参考；写 GPUI 组件前先查这里，禁止凭印象猜接口。
+- `~/Desktop/code/github/zed`：GPUI 原语、窗口行为和大型应用架构的补充参考；仅在 gpui-component 没有对应模式时查阅。
+- 两个参考仓只读。FluxDown 的 `Cargo.toml`/`Cargo.lock` 锁定版本与实际编译结果优先；禁止照搬版本不匹配的 API。
 
 ## 固定分层
 

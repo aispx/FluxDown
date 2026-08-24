@@ -1,148 +1,290 @@
+use std::{cmp::Ordering, collections::HashSet};
+
 use fluxdown_ui_components::{primary_icon_button, toolbar_action_button};
 use fluxdown_ui_theme::active_theme;
 use gpui::{
-    Context, Div, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement,
-    SharedString, StatefulInteractiveElement as _, Styled, div, prelude::FluentBuilder as _, px,
+    AnyElement, App, AppContext as _, ClickEvent, Context, Div, InteractiveElement as _,
+    IntoElement, Modifiers, MouseButton, ParentElement, Render, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled, Window, div, prelude::FluentBuilder as _, px,
     relative,
 };
 use gpui_component::{
     ActiveTheme as _, FocusableExt as _, Icon, IconName, Sizable as _, Size,
+    button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
-    scroll::{Scrollbar, ScrollbarMode},
+    popover::Popover,
+    table::{Column, ColumnSort, DataTable, TableDelegate, TableState},
     tooltip::Tooltip,
-    v_flex, v_virtual_list,
+    v_flex,
 };
 
-use super::{
-    CREATED_COLUMN_WIDTH, DownloadView, ETA_COLUMN_WIDTH, SELECTION_COLUMN_WIDTH,
-    SIZE_COLUMN_WIDTH, SPEED_COLUMN_WIDTH, STATUS_COLUMN_WIDTH, TASK_ROW_HEIGHT, TaskKind,
-    TaskPreview, TaskState,
-};
+use super::{DownloadView, SelectAllTasks, TASK_ROW_HEIGHT, TaskKind, TaskPreview, TaskState};
+use crate::strings::DownloadStrings;
 
-impl DownloadView {
-    fn column_label(&self, label: SharedString, width: f32, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens();
-        h_flex()
-            .w(px(width))
-            .flex_none()
-            .items_center()
-            .text_size(tokens.typography.xs.size)
-            .text_color(tokens.colors.muted_foreground)
-            .child(
-                div()
-                    .h(px(16.))
-                    .w(px(1.))
-                    .mr(tokens.spacing.sm)
-                    .bg(tokens.colors.border),
-            )
-            .child(label)
+const SELECTION_COLUMN_WIDTH: f32 = 36.;
+const TABLE_HEADER_CROP: f32 = 2.;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DownloadColumnKind {
+    FileName,
+    Size,
+    Status,
+    Speed,
+    Eta,
+    Created,
+}
+
+impl DownloadColumnKind {
+    const ALL: [Self; 6] = [
+        Self::FileName,
+        Self::Size,
+        Self::Status,
+        Self::Speed,
+        Self::Eta,
+        Self::Created,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::FileName => "file_name",
+            Self::Size => "size",
+            Self::Status => "status",
+            Self::Speed => "speed",
+            Self::Eta => "eta",
+            Self::Created => "created",
+        }
     }
 
-    fn render_table_header(&self, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens();
-        let all_tasks_selected = !self.items.is_empty()
-            && self
-                .items
-                .iter()
-                .all(|task| self.selected_tasks.contains(&task.id));
-
-        h_flex()
-            .h(px(34.))
-            .mx(px(4.))
-            .flex_none()
-            .items_center()
-            .px(tokens.spacing.lg)
-            .rounded(tokens.radius.md)
-            .overflow_hidden()
-            .bg(tokens.colors.muted)
-            .child(
-                h_flex()
-                    .w(px(SELECTION_COLUMN_WIDTH))
-                    .flex_none()
-                    .items_center()
-                    .child(
-                        Checkbox::new("select-all-download-tasks")
-                            .with_size(Size::XSmall)
-                            .checked(all_tasks_selected)
-                            .focus_ring(false)
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                if *checked {
-                                    for task in &this.items {
-                                        this.selected_tasks.insert(task.id);
-                                    }
-                                } else {
-                                    this.selected_tasks.clear();
-                                }
-                                this.selection_anchor = None;
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .w(px(188.))
-                    .min_w(px(140.))
-                    .max_w(px(188.))
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child(self.strings.col_file_name.clone()),
-            )
-            .child(self.column_label(self.strings.col_size.clone(), SIZE_COLUMN_WIDTH, cx))
-            .child(self.column_label(self.strings.col_status.clone(), STATUS_COLUMN_WIDTH, cx))
-            .child(self.column_label(self.strings.col_speed.clone(), SPEED_COLUMN_WIDTH, cx))
-            .child(self.column_label(self.strings.col_eta.clone(), ETA_COLUMN_WIDTH, cx))
-            .child(self.column_label(self.strings.col_created.clone(), CREATED_COLUMN_WIDTH, cx))
+    fn default_width(self) -> f32 {
+        match self {
+            Self::FileName => 240.,
+            Self::Size => 90.,
+            Self::Status => 150.,
+            Self::Speed => 100.,
+            Self::Eta => 100.,
+            Self::Created => 110.,
+        }
     }
 
-    fn render_status(
+    fn min_width(self) -> f32 {
+        match self {
+            Self::FileName => 160.,
+            Self::Size => 72.,
+            Self::Status => 118.,
+            Self::Speed => 82.,
+            Self::Eta => 82.,
+            Self::Created => 90.,
+        }
+    }
+
+    fn label(self, strings: &DownloadStrings) -> SharedString {
+        match self {
+            Self::FileName => strings.col_file_name.clone(),
+            Self::Size => strings.col_size.clone(),
+            Self::Status => strings.col_status.clone(),
+            Self::Speed => strings.col_speed.clone(),
+            Self::Eta => strings.col_eta.clone(),
+            Self::Created => strings.col_created.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct DownloadColumn {
+    kind: DownloadColumnKind,
+    width: f32,
+    visible: bool,
+}
+
+impl DownloadColumn {
+    fn new(kind: DownloadColumnKind) -> Self {
+        Self {
+            kind,
+            width: kind.default_width(),
+            visible: true,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct DraggedColumnMenuItem {
+    kind: DownloadColumnKind,
+    label: SharedString,
+}
+
+impl Render for DraggedColumnMenuItem {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let tokens = active_theme(cx).tokens();
+        h_flex()
+            .px(tokens.spacing.md)
+            .py(tokens.spacing.xs)
+            .gap(tokens.spacing.sm)
+            .rounded(tokens.radius.sm)
+            .border_1()
+            .border_color(tokens.colors.border)
+            .bg(tokens.colors.surface)
+            .shadow_sm()
+            .text_color(tokens.colors.surface_foreground)
+            .child(Icon::new(IconName::Menu).size(px(13.)))
+            .child(self.label.clone())
+    }
+}
+
+pub(super) struct DownloadTableDelegate {
+    strings: DownloadStrings,
+    columns: Vec<DownloadColumn>,
+    items: Vec<TaskPreview>,
+    selected_tasks: HashSet<usize>,
+    selection_anchor: Option<usize>,
+}
+
+impl DownloadTableDelegate {
+    pub(super) fn new(strings: DownloadStrings, items: Vec<TaskPreview>) -> Self {
+        Self {
+            strings,
+            columns: DownloadColumnKind::ALL
+                .into_iter()
+                .map(DownloadColumn::new)
+                .collect(),
+            items,
+            selected_tasks: HashSet::new(),
+            selection_anchor: None,
+        }
+    }
+
+    pub(super) fn set_strings(&mut self, strings: DownloadStrings) {
+        self.strings = strings;
+    }
+
+    fn visible_columns_count(&self) -> usize {
+        self.columns.iter().filter(|column| column.visible).count()
+    }
+
+    fn visible_column(&self, col_ix: usize) -> Option<&DownloadColumn> {
+        if col_ix == 0 {
+            return None;
+        }
+        self.columns
+            .iter()
+            .filter(|column| column.visible)
+            .nth(col_ix - 1)
+    }
+
+    fn move_visible_column(&mut self, from_ix: usize, to_ix: usize) {
+        if from_ix == 0 || to_ix == 0 {
+            return;
+        }
+        let visible_positions: Vec<_> = self
+            .columns
+            .iter()
+            .enumerate()
+            .filter_map(|(ix, column)| column.visible.then_some(ix))
+            .collect();
+        let Some(&from_position) = visible_positions.get(from_ix - 1) else {
+            return;
+        };
+        let Some(&to_position) = visible_positions.get(to_ix - 1) else {
+            return;
+        };
+        let column = self.columns.remove(from_position);
+        self.columns.insert(to_position, column);
+    }
+
+    fn move_column_kind(&mut self, from: DownloadColumnKind, to: DownloadColumnKind) {
+        let Some(from_ix) = self.columns.iter().position(|column| column.kind == from) else {
+            return;
+        };
+        let Some(to_ix) = self.columns.iter().position(|column| column.kind == to) else {
+            return;
+        };
+        if from_ix == to_ix {
+            return;
+        }
+        let column = self.columns.remove(from_ix);
+        self.columns.insert(to_ix, column);
+    }
+
+    fn set_column_visible(&mut self, kind: DownloadColumnKind, visible: bool) -> bool {
+        if !visible && self.visible_columns_count() <= 1 {
+            return false;
+        }
+        let Some(column) = self.columns.iter_mut().find(|column| column.kind == kind) else {
+            return false;
+        };
+        if column.visible == visible {
+            return false;
+        }
+        column.visible = visible;
+        true
+    }
+
+    fn reset_columns(&mut self) {
+        self.columns = DownloadColumnKind::ALL
+            .into_iter()
+            .map(DownloadColumn::new)
+            .collect();
+    }
+
+    fn select_all_tasks(&mut self) {
+        self.selected_tasks.clear();
+        self.selected_tasks
+            .extend(self.items.iter().map(|task| task.id));
+        self.selection_anchor = None;
+    }
+
+    fn select_task(&mut self, task_id: usize, modifiers: Modifiers) {
+        if modifiers.shift
+            && let Some(anchor) = self.selection_anchor
+            && let Some(anchor_index) = self.items.iter().position(|task| task.id == anchor)
+            && let Some(task_index) = self.items.iter().position(|task| task.id == task_id)
+        {
+            let (start, end) = if anchor_index <= task_index {
+                (anchor_index, task_index)
+            } else {
+                (task_index, anchor_index)
+            };
+            self.selected_tasks.clear();
+            self.selected_tasks
+                .extend(self.items[start..=end].iter().map(|task| task.id));
+            return;
+        }
+
+        if modifiers.secondary() {
+            if !self.selected_tasks.remove(&task_id) {
+                self.selected_tasks.insert(task_id);
+            }
+        } else {
+            self.selected_tasks.clear();
+            self.selected_tasks.insert(task_id);
+        }
+        self.selection_anchor = Some(task_id);
+    }
+
+    fn compare_tasks(
+        kind: DownloadColumnKind,
+        left: &TaskPreview,
+        right: &TaskPreview,
+    ) -> Ordering {
+        let ordering = match kind {
+            DownloadColumnKind::FileName => left.name.cmp(right.name),
+            DownloadColumnKind::Size => left.size_bytes.cmp(&right.size_bytes),
+            DownloadColumnKind::Status => left.state.cmp(&right.state),
+            DownloadColumnKind::Speed => left
+                .speed_bytes_per_second
+                .cmp(&right.speed_bytes_per_second),
+            DownloadColumnKind::Eta => left.eta_seconds.cmp(&right.eta_seconds),
+            DownloadColumnKind::Created => left.created_order.cmp(&right.created_order),
+        };
+        ordering.then_with(|| left.id.cmp(&right.id))
+    }
+
+    fn task_visuals(
         &self,
         task: TaskPreview,
-        status: SharedString,
-        color: gpui::Hsla,
-        cx: &mut Context<Self>,
-    ) -> Div {
+        cx: &App,
+    ) -> (SharedString, gpui::Hsla, IconName, gpui::Hsla, SharedString) {
         let tokens = active_theme(cx).tokens();
-        v_flex()
-            .w(px(STATUS_COLUMN_WIDTH))
-            .flex_none()
-            .gap(px(2.))
-            .child(
-                h_flex()
-                    .gap(tokens.spacing.xs)
-                    .text_size(tokens.typography.xs.size)
-                    .line_height(relative(1.))
-                    .font_weight(tokens.typography.xs.weight)
-                    .child(task.progress_label)
-                    .child(status),
-            )
-            .child(
-                div()
-                    .relative()
-                    .h(px(4.))
-                    .w(px(110.))
-                    .overflow_hidden()
-                    .rounded_full()
-                    .bg(tokens.colors.muted)
-                    .child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .w(gpui::relative(task.progress))
-                            .bg(color),
-                    ),
-            )
-    }
-
-    fn render_task_row(&self, task: TaskPreview, cx: &mut Context<Self>) -> Div {
-        let tokens = active_theme(cx).tokens().clone();
-        let task_id = task.id;
-        let selected = self.selected_tasks.contains(&task_id);
-        let hover_background = if selected {
-            tokens.colors.accent
-        } else {
-            tokens.colors.muted
-        };
         let (status, status_color) = match task.state {
             TaskState::Completed => (self.strings.status_completed.clone(), cx.theme().success),
             TaskState::Paused => (self.strings.status_paused.clone(), cx.theme().warning),
@@ -164,145 +306,314 @@ impl DownloadView {
                 self.strings.category_archive.clone(),
             ),
         };
+        (status, status_color, file_icon, file_icon_color, category)
+    }
 
+    fn render_file_cell(&self, task: TaskPreview, cx: &App) -> AnyElement {
+        let tokens = active_theme(cx).tokens();
+        let (_, _, file_icon, file_icon_color, category) = self.task_visuals(task, cx);
         h_flex()
-            .h(px(TASK_ROW_HEIGHT))
-            .w_full()
-            .flex_none()
+            .size_full()
+            .min_w_0()
             .items_center()
-            .px(tokens.spacing.lg)
-            .rounded(tokens.radius.sm)
-            .cursor_pointer()
-            .when(selected, |this| this.bg(tokens.colors.accent))
-            .hover(|style| style.bg(hover_background))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                    this.select_task(task_id, event.modifiers);
-                    cx.notify();
-                }),
-            )
+            .gap(tokens.spacing.sm)
             .child(
-                h_flex()
-                    .id(("download-task-multi-select-slot", task_id))
-                    .w(px(SELECTION_COLUMN_WIDTH))
+                div()
                     .flex_none()
-                    .items_center()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(
-                        Checkbox::new(("download-task-multi-select", task_id))
-                            .with_size(Size::XSmall)
-                            .checked(selected)
-                            .focus_ring(false)
-                            .on_click(cx.listener(move |this, checked: &bool, _, cx| {
-                                if *checked {
-                                    this.selected_tasks.insert(task_id);
-                                } else {
-                                    this.selected_tasks.remove(&task_id);
-                                }
-                                this.selection_anchor = Some(task_id);
-                                cx.notify();
-                            })),
-                    ),
+                    .text_color(file_icon_color)
+                    .child(Icon::new(file_icon).size(px(14.))),
             )
             .child(
-                h_flex()
-                    .w(px(188.))
-                    .min_w(px(140.))
-                    .max_w(px(188.))
-                    .gap(tokens.spacing.sm)
+                v_flex()
+                    .min_w_0()
+                    .gap(px(1.))
                     .child(
                         div()
-                            .flex_none()
-                            .text_color(file_icon_color)
-                            .child(Icon::new(file_icon).size(px(14.))),
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.))
+                            .line_height(relative(1.))
+                            .font_weight(tokens.typography.sm.weight)
+                            .child(task.name),
                     )
                     .child(
-                        v_flex()
-                            .min_w_0()
-                            .gap(px(1.))
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_size(px(12.))
-                                    .line_height(relative(1.))
-                                    .font_weight(tokens.typography.sm.weight)
-                                    .child(task.name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(8.))
-                                    .line_height(relative(1.))
-                                    .text_color(tokens.colors.muted_foreground)
-                                    .child(category),
-                            ),
+                        div()
+                            .text_size(px(8.))
+                            .line_height(relative(1.))
+                            .text_color(tokens.colors.muted_foreground)
+                            .child(category),
                     ),
             )
-            .child(
-                div()
-                    .w(px(SIZE_COLUMN_WIDTH))
-                    .flex_none()
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child(task.size),
-            )
-            .child(self.render_status(task, status, status_color, cx))
-            .child(
-                div()
-                    .w(px(SPEED_COLUMN_WIDTH))
-                    .flex_none()
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child("—"),
-            )
-            .child(
-                div()
-                    .w(px(ETA_COLUMN_WIDTH))
-                    .flex_none()
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child("—"),
-            )
-            .child(
-                div()
-                    .w(px(CREATED_COLUMN_WIDTH))
-                    .flex_none()
-                    .text_size(tokens.typography.xs.size)
-                    .text_color(tokens.colors.muted_foreground)
-                    .child(self.strings.today.clone()),
-            )
+            .into_any_element()
     }
 
-    fn render_list_item(&self, index: usize, cx: &mut Context<Self>) -> Div {
-        self.render_task_row(self.items[index], cx)
-    }
-
-    fn render_task_list(&self, cx: &mut Context<Self>) -> Div {
+    fn render_status_cell(&self, task: TaskPreview, cx: &App) -> AnyElement {
         let tokens = active_theme(cx).tokens();
-        div()
-            .relative()
-            .mx(px(4.))
-            .flex_1()
-            .min_h_0()
-            .overflow_hidden()
-            .bg(tokens.colors.surface)
+        let (status, status_color, _, _, _) = self.task_visuals(task, cx);
+        v_flex()
+            .size_full()
+            .justify_center()
+            .gap(px(2.))
             .child(
-                v_virtual_list(
-                    cx.entity(),
-                    "download-task-list",
-                    self.item_sizes.clone(),
-                    |this, visible_range, _, cx| {
-                        visible_range
-                            .map(|index| this.render_list_item(index, cx))
-                            .collect()
-                    },
-                )
-                .track_scroll(&self.scroll_handle)
-                .size_full(),
+                h_flex()
+                    .gap(tokens.spacing.xs)
+                    .text_size(tokens.typography.xs.size)
+                    .line_height(relative(1.))
+                    .font_weight(tokens.typography.xs.weight)
+                    .child(task.progress_label)
+                    .child(status),
             )
-            .child(Scrollbar::vertical(&self.scroll_handle).mode(ScrollbarMode::Always))
+            .child(
+                div()
+                    .relative()
+                    .h(px(4.))
+                    .w_full()
+                    .max_w(px(110.))
+                    .overflow_hidden()
+                    .rounded_full()
+                    .bg(tokens.colors.muted)
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .w(relative(task.progress))
+                            .bg(status_color),
+                    ),
+            )
+            .into_any_element()
     }
+}
+
+impl TableDelegate for DownloadTableDelegate {
+    fn columns_count(&self, _cx: &App) -> usize {
+        self.visible_columns_count() + 1
+    }
+
+    fn rows_count(&self, _cx: &App) -> usize {
+        self.items.len()
+    }
+
+    fn column(&self, col_ix: usize, _cx: &App) -> Column {
+        if col_ix == 0 {
+            return Column::new("selection", "")
+                .width(px(SELECTION_COLUMN_WIDTH))
+                .min_width(px(SELECTION_COLUMN_WIDTH))
+                .max_width(px(SELECTION_COLUMN_WIDTH))
+                .fixed_left()
+                .resizable(false)
+                .movable(false)
+                .selectable(false)
+                .p_0();
+        }
+
+        let Some(column) = self.visible_column(col_ix) else {
+            return Column::new("missing", "").resizable(false).movable(false);
+        };
+        Column::new(column.kind.key(), column.kind.label(&self.strings))
+            .width(px(column.width))
+            .min_width(px(column.kind.min_width()))
+            .max_width(px(480.))
+            .sortable()
+    }
+
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        if col_ix == 0 {
+            let all_tasks_selected = !self.items.is_empty()
+                && self
+                    .items
+                    .iter()
+                    .all(|task| self.selected_tasks.contains(&task.id));
+            return h_flex()
+                .size_full()
+                .justify_center()
+                .relative()
+                .left(px(4.0))
+                .top(px(1.))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(
+                    Checkbox::new("select-all-download-tasks")
+                        .with_size(Size::XSmall)
+                        .checked(all_tasks_selected)
+                        .focus_ring(false)
+                        .on_click(cx.listener(|table, checked: &bool, _, cx| {
+                            let delegate = table.delegate_mut();
+                            if *checked {
+                                delegate
+                                    .selected_tasks
+                                    .extend(delegate.items.iter().map(|task| task.id));
+                            } else {
+                                delegate.selected_tasks.clear();
+                            }
+                            delegate.selection_anchor = None;
+                            cx.notify();
+                        })),
+                );
+        }
+
+        let tokens = active_theme(cx).tokens();
+        let label = self
+            .visible_column(col_ix)
+            .map(|column| column.kind.label(&self.strings))
+            .unwrap_or_default();
+        h_flex()
+            .size_full()
+            .items_center()
+            .relative()
+            .top(px(1.))
+            .text_size(tokens.typography.sm.size)
+            .font_weight(tokens.typography.sm.weight)
+            .child(label)
+    }
+
+    fn render_tr(
+        &mut self,
+        row_ix: usize,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
+        let Some(task) = self.items.get(row_ix).copied() else {
+            return div().id(("download-task-row", row_ix));
+        };
+        let task_id = task.id;
+        let selected = self.selected_tasks.contains(&task_id);
+        let selected_background = active_theme(cx).tokens().colors.accent;
+
+        div()
+            .id(("download-task-row", task_id))
+            .relative()
+            .when(selected, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded(active_theme(cx).tokens().radius.sm)
+                        .bg(selected_background),
+                )
+            })
+            .on_click(cx.listener(move |table, event: &ClickEvent, _, cx| {
+                table.delegate_mut().select_task(task_id, event.modifiers());
+                cx.notify();
+            }))
+    }
+
+    fn render_td(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        let Some(task) = self.items.get(row_ix).copied() else {
+            return div().into_any_element();
+        };
+        let tokens = active_theme(cx).tokens();
+
+        if col_ix == 0 {
+            let task_id = task.id;
+            let selected = self.selected_tasks.contains(&task_id);
+            return h_flex()
+                .size_full()
+                .justify_center()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(
+                    Checkbox::new(("download-task-multi-select", task_id))
+                        .with_size(Size::XSmall)
+                        .checked(selected)
+                        .focus_ring(false)
+                        .on_click(cx.listener(move |table, checked: &bool, _, cx| {
+                            let delegate = table.delegate_mut();
+                            if *checked {
+                                delegate.selected_tasks.insert(task_id);
+                            } else {
+                                delegate.selected_tasks.remove(&task_id);
+                            }
+                            delegate.selection_anchor = Some(task_id);
+                            cx.notify();
+                        })),
+                )
+                .into_any_element();
+        }
+
+        let Some(kind) = self.visible_column(col_ix).map(|column| column.kind) else {
+            return div().into_any_element();
+        };
+        match kind {
+            DownloadColumnKind::FileName => self.render_file_cell(task, cx),
+            DownloadColumnKind::Size => h_flex()
+                .size_full()
+                .items_center()
+                .text_size(tokens.typography.xs.size)
+                .text_color(tokens.colors.muted_foreground)
+                .child(task.size)
+                .into_any_element(),
+            DownloadColumnKind::Status => self.render_status_cell(task, cx),
+            DownloadColumnKind::Speed | DownloadColumnKind::Eta => h_flex()
+                .size_full()
+                .items_center()
+                .text_size(tokens.typography.xs.size)
+                .text_color(tokens.colors.muted_foreground)
+                .child("—")
+                .into_any_element(),
+            DownloadColumnKind::Created => h_flex()
+                .size_full()
+                .items_center()
+                .text_size(tokens.typography.xs.size)
+                .text_color(tokens.colors.muted_foreground)
+                .child(self.strings.today.clone())
+                .into_any_element(),
+        }
+    }
+
+    fn move_column(
+        &mut self,
+        col_ix: usize,
+        to_ix: usize,
+        _window: &mut Window,
+        _cx: &mut Context<TableState<Self>>,
+    ) {
+        self.move_visible_column(col_ix, to_ix);
+    }
+
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: ColumnSort,
+        _window: &mut Window,
+        _cx: &mut Context<TableState<Self>>,
+    ) {
+        let Some(kind) = self.visible_column(col_ix).map(|column| column.kind) else {
+            return;
+        };
+        match sort {
+            ColumnSort::Default => self.items.sort_by_key(|task| task.id),
+            ColumnSort::Ascending => self
+                .items
+                .sort_by(|left, right| Self::compare_tasks(kind, left, right)),
+            ColumnSort::Descending => self
+                .items
+                .sort_by(|left, right| Self::compare_tasks(kind, right, left)),
+        }
+    }
+}
+
+impl DownloadView {
+    fn select_all_tasks(
+        &mut self,
+        _: &SelectAllTasks,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.table_state.update(cx, |table, cx| {
+            table.delegate_mut().select_all_tasks();
+            cx.notify();
+        });
+    }
+
     fn toolbar_icon_action(
         &self,
         tooltip_id: &'static str,
@@ -324,6 +635,127 @@ impl DownloadView {
                 destructive,
                 cx,
             ))
+    }
+
+    fn render_columns_menu(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let table_state = self.table_state.clone();
+        let menu_title = self.strings.view_columns_menu_title.clone();
+        let reset_label = self.strings.view_columns_reset_action.clone();
+        let at_least_one_label = self.strings.view_columns_at_least_one.clone();
+        let trigger_label = menu_title.clone();
+
+        Popover::new("download-columns-popover")
+            .p_0()
+            .w(px(230.))
+            .trigger(
+                Button::new("download-columns")
+                    .ghost()
+                    .xsmall()
+                    .compact()
+                    .icon(IconName::Settings2)
+                    .tooltip(trigger_label),
+            )
+            .content(move |_, _, cx| {
+                let tokens = active_theme(cx).tokens().clone();
+                let columns = table_state.read(cx).delegate().columns.clone();
+                let visible_count = columns.iter().filter(|column| column.visible).count();
+                let table_for_reset = table_state.clone();
+
+                v_flex()
+                    .w_full()
+                    .py(tokens.spacing.sm)
+                    .child(
+                        h_flex()
+                            .px(tokens.spacing.md)
+                            .pb(tokens.spacing.sm)
+                            .gap(tokens.spacing.sm)
+                            .text_size(tokens.typography.xs.size)
+                            .font_weight(tokens.typography.sm.weight)
+                            .child(Icon::new(IconName::Settings2).size(px(13.)))
+                            .child(menu_title.clone()),
+                    )
+                    .children(columns.into_iter().map(|column| {
+                        let kind = column.kind;
+                        let label = kind.label(&table_state.read(cx).delegate().strings);
+                        let drag = DraggedColumnMenuItem {
+                            kind,
+                            label: label.clone(),
+                        };
+                        let table_for_checkbox = table_state.clone();
+                        let table_for_drop = table_state.clone();
+                        h_flex()
+                            .id(format!("download-column-menu-item-{}", kind.key()))
+                            .h(px(32.))
+                            .px(tokens.spacing.md)
+                            .gap(tokens.spacing.sm)
+                            .cursor_pointer()
+                            .hover(|style| style.bg(tokens.colors.muted.opacity(0.55)))
+                            .drag_over::<DraggedColumnMenuItem>(move |style, _, _, _| {
+                                style.bg(tokens.colors.accent)
+                            })
+                            .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
+                            .on_drop(move |drag: &DraggedColumnMenuItem, _, cx| {
+                                table_for_drop.update(cx, |table, cx| {
+                                    table.delegate_mut().move_column_kind(drag.kind, kind);
+                                    table.refresh(cx);
+                                    cx.notify();
+                                });
+                            })
+                            .child(
+                                Icon::new(IconName::Menu)
+                                    .size(px(13.))
+                                    .text_color(tokens.colors.muted_foreground),
+                            )
+                            .child(
+                                Checkbox::new(format!("download-column-visible-{}", kind.key()))
+                                    .with_size(Size::XSmall)
+                                    .checked(column.visible)
+                                    .focus_ring(false)
+                                    .on_click(move |checked: &bool, _, cx| {
+                                        table_for_checkbox.update(cx, |table, cx| {
+                                            if table
+                                                .delegate_mut()
+                                                .set_column_visible(kind, *checked)
+                                            {
+                                                table.refresh(cx);
+                                                cx.notify();
+                                            }
+                                        });
+                                    }),
+                            )
+                            .child(div().min_w_0().flex_1().truncate().child(label))
+                    }))
+                    .when(visible_count == 1, |this| {
+                        this.child(
+                            div()
+                                .px(tokens.spacing.md)
+                                .py(tokens.spacing.xs)
+                                .text_size(px(10.))
+                                .text_color(tokens.colors.muted_foreground)
+                                .child(at_least_one_label.clone()),
+                        )
+                    })
+                    .child(
+                        div()
+                            .h(px(1.))
+                            .my(tokens.spacing.xs)
+                            .bg(tokens.colors.border),
+                    )
+                    .child(
+                        Button::new("download-columns-reset")
+                            .ghost()
+                            .w_full()
+                            .justify_start()
+                            .label(reset_label.clone())
+                            .on_click(move |_, _, cx| {
+                                table_for_reset.update(cx, |table, cx| {
+                                    table.delegate_mut().reset_columns();
+                                    table.refresh(cx);
+                                    cx.notify();
+                                });
+                            }),
+                    )
+            })
     }
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> Div {
@@ -385,6 +817,8 @@ impl DownloadView {
                 true,
                 cx,
             ))
+            .child(div().flex_1())
+            .child(self.render_columns_menu(cx))
     }
 
     pub(super) fn render_main(&self, cx: &mut Context<Self>) -> Div {
@@ -395,7 +829,31 @@ impl DownloadView {
             .min_h_0()
             .bg(tokens.colors.surface)
             .child(self.render_toolbar(cx))
-            .child(self.render_table_header(cx))
-            .child(self.render_task_list(cx))
+            .child(
+                div()
+                    .id("download-task-table-container")
+                    .relative()
+                    .mx(px(4.))
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .on_action(cx.listener(Self::select_all_tasks))
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(-TABLE_HEADER_CROP))
+                            .right_0()
+                            .bottom_0()
+                            .left_0()
+                            .child(
+                                DataTable::new(&self.table_state)
+                                    .with_size(Size::Size(px(TASK_ROW_HEIGHT)))
+                                    .stripe(false)
+                                    .bordered(false)
+                                    .scrollbar_visible(true, true),
+                            ),
+                    ),
+            )
     }
 }

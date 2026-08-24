@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
-use gpui::{App, Global, Window};
+use gpui::{App, Global, Window, linear_color_stop, linear_gradient};
 use gpui_component::{Theme as ComponentTheme, ThemeMode};
 use serde::{Deserialize, Serialize};
 
 use crate::{FluxThemeDefinition, SemanticThemeTokens};
+
+const TABLE_HOVER_TOP_OPACITY: f32 = 0.78;
+const TABLE_HOVER_BOTTOM_OPACITY: f32 = 0.48;
 
 /// 用户主题偏好；`System` 在每次安装时解析当前系统明暗模式。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +100,23 @@ pub fn install_theme(
         component_theme.focus_ring = false;
         component_theme.title_bar = tokens.colors.surface;
         component_theme.title_bar_border = tokens.colors.border;
+        component_theme.table = tokens.colors.surface;
+        component_theme.table_active = tokens.colors.accent;
+        component_theme.table_active_border = tokens.colors.primary;
+        component_theme.table_even = tokens.colors.surface;
+        component_theme.table_head = tokens.colors.muted;
+        component_theme.table_head_foreground = tokens.colors.muted_foreground;
+        component_theme.table_hover = tokens.colors.muted;
+        component_theme.table_row_border = tokens.colors.border;
+        component_theme.tokens.table = tokens.colors.surface.into();
+        component_theme.tokens.table_active = tokens.colors.accent.into();
+        component_theme.tokens.table_even = tokens.colors.surface.into();
+        component_theme.tokens.table_head = tokens.colors.muted.into();
+        component_theme.tokens.table_hover.background = linear_gradient(
+            180.,
+            linear_color_stop(tokens.colors.muted.opacity(TABLE_HOVER_TOP_OPACITY), 0.),
+            linear_color_stop(tokens.colors.muted.opacity(TABLE_HOVER_BOTTOM_OPACITY), 1.),
+        );
     }
     ComponentTheme::sync_base(cx);
     gpui_base::Theme::global_mut(cx).tokens = tokens.clone();

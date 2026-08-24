@@ -55,7 +55,7 @@ pub fn run() -> Result<(), ShellError> {
             options.window_bounds = Some(WindowBounds::Windowed(bounds));
 
             if let Err(error) = cx.open_window(options, |window, cx| {
-                let shell = cx.new(|cx| ShellView::new(translator, cx));
+                let shell = cx.new(|cx| ShellView::new(translator, window, cx));
                 cx.new(|cx| Root::new(shell, window, cx))
             }) {
                 eprintln!("failed to open FluxDown desktop window: {error:#}");
@@ -69,7 +69,10 @@ pub fn run() -> Result<(), ShellError> {
 }
 
 fn main_window_options() -> WindowOptions {
-    TitleBar::window_options()
+    WindowOptions {
+        window_min_size: Some(size(px(720.), px(520.))),
+        ..TitleBar::window_options()
+    }
 }
 
 fn system_locale() -> String {
@@ -85,7 +88,7 @@ fn system_locale() -> String {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{point, px};
+    use gpui::{point, px, size};
 
     use super::main_window_options;
 
@@ -108,5 +111,6 @@ mod tests {
                 .and_then(|titlebar| titlebar.title.as_deref()),
             None
         );
+        assert_eq!(options.window_min_size, Some(size(px(720.), px(520.))));
     }
 }

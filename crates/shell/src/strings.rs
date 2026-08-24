@@ -77,6 +77,9 @@ pub(crate) struct DownloadStrings {
     pub(crate) status_seeding: SharedString,
     pub(crate) stop_all: SharedString,
     pub(crate) today: SharedString,
+    pub(crate) view_columns_at_least_one: SharedString,
+    pub(crate) view_columns_menu_title: SharedString,
+    pub(crate) view_columns_reset_action: SharedString,
 }
 
 impl DownloadStrings {
@@ -113,6 +116,9 @@ impl DownloadStrings {
             status_seeding: shared(translator.text(keys::STATUS_SEEDING)),
             stop_all: shared(translator.text(keys::STOP_ALL)),
             today: shared(translator.text(keys::TODAY)),
+            view_columns_at_least_one: shared(translator.text(keys::VIEW_COLUMNS_AT_LEAST_ONE)),
+            view_columns_menu_title: shared(translator.text(keys::VIEW_COLUMNS_MENU_TITLE)),
+            view_columns_reset_action: shared(translator.text(keys::VIEW_COLUMNS_RESET_ACTION)),
         }
     }
 }
