@@ -20,7 +20,7 @@ use gpui_component::{
 };
 
 use crate::{
-    model::{TaskKind, TaskPreview, TaskState},
+    model::{DownloadFilter, TaskKind, TaskPreview, TaskState},
     pages::downloads::{DownloadView, SelectAllTasks, TASK_ROW_HEIGHT},
     strings::DownloadStrings,
 };
@@ -137,6 +137,7 @@ impl Render for DraggedColumnMenuItem {
 pub(crate) struct DownloadTableDelegate {
     strings: DownloadStrings,
     columns: Vec<DownloadColumn>,
+    source_items: Vec<TaskPreview>,
     items: Vec<TaskPreview>,
     selected_tasks: HashSet<usize>,
     selection_anchor: Option<usize>,
@@ -150,6 +151,7 @@ impl DownloadTableDelegate {
                 .into_iter()
                 .map(DownloadColumn::new)
                 .collect(),
+            source_items: items.clone(),
             items,
             selected_tasks: HashSet::new(),
             selection_anchor: None,
@@ -158,6 +160,27 @@ impl DownloadTableDelegate {
 
     pub(crate) fn set_strings(&mut self, strings: DownloadStrings) {
         self.strings = strings;
+    }
+
+    pub(crate) fn set_filter(&mut self, filter: DownloadFilter) {
+        self.items = self
+            .source_items
+            .iter()
+            .copied()
+            .filter(|task| filter.matches(task))
+            .collect();
+        self.selected_tasks
+            .retain(|task_id| self.items.iter().any(|task| task.id == *task_id));
+        self.selection_anchor = self
+            .selection_anchor
+            .filter(|task_id| self.selected_tasks.contains(task_id));
+    }
+
+    pub(crate) fn count_matching(&self, filter: DownloadFilter) -> usize {
+        self.source_items
+            .iter()
+            .filter(|task| filter.matches(task))
+            .count()
     }
 
     fn visible_columns_count(&self) -> usize {

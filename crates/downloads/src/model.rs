@@ -1,14 +1,69 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SidebarItem {
+pub(crate) enum DownloadStatusFilter {
     All,
-    Downloading,
     Completed,
-    Paused,
-    Failed,
-    Seeding,
-    MainQueue,
-    LaterQueue,
-    AllFiles,
+    Incomplete,
+}
+
+impl DownloadStatusFilter {
+    pub(crate) fn exclusive_toggle(current: Option<Self>, clicked: Self) -> Option<Self> {
+        if current == Some(clicked) {
+            None
+        } else {
+            Some(clicked)
+        }
+    }
+
+    fn slot(self) -> usize {
+        match self {
+            Self::All => 0,
+            Self::Completed => 1,
+            Self::Incomplete => 2,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StatusFolderMotion {
+    from: [f32; 3],
+    to: [f32; 3],
+}
+
+impl StatusFolderMotion {
+    pub(crate) fn settled(open: Option<DownloadStatusFilter>) -> Self {
+        let mut amounts = [0.; 3];
+        if let Some(status) = open {
+            amounts[status.slot()] = 1.;
+        }
+        Self {
+            from: amounts,
+            to: amounts,
+        }
+    }
+
+    pub(crate) fn retarget(self, progress: f32, next: Option<DownloadStatusFilter>) -> Self {
+        let progress = progress.clamp(0., 1.);
+        let mut from = [0.; 3];
+        for (slot, amount) in from.iter_mut().enumerate() {
+            *amount = self.from[slot] + (self.to[slot] - self.from[slot]) * progress;
+        }
+        let mut to = [0.; 3];
+        if let Some(status) = next {
+            to[status.slot()] = 1.;
+        }
+        Self { from, to }
+    }
+
+    pub(crate) fn amount(self, status: DownloadStatusFilter, progress: f32) -> f32 {
+        let progress = progress.clamp(0., 1.);
+        let slot = status.slot();
+        self.from[slot] + (self.to[slot] - self.from[slot]) * progress
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DownloadCategory {
+    All,
     Video,
     Audio,
     Document,
@@ -18,11 +73,33 @@ pub(crate) enum SidebarItem {
     Other,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DownloadFilter {
+    pub(crate) status: DownloadStatusFilter,
+    pub(crate) category: DownloadCategory,
+}
+
+impl DownloadFilter {
+    pub(crate) const ALL: Self = Self {
+        status: DownloadStatusFilter::All,
+        category: DownloadCategory::All,
+    };
+
+    pub(crate) const fn new(status: DownloadStatusFilter, category: DownloadCategory) -> Self {
+        Self { status, category }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum SidebarSection {
-    Status,
     Queues,
-    Categories,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SidebarSelection {
+    Download(DownloadFilter),
+    MainQueue,
+    LaterQueue,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,6 +128,29 @@ pub(crate) struct TaskPreview {
     pub(crate) progress: f32,
     pub(crate) progress_label: &'static str,
     pub(crate) state: TaskState,
+}
+
+impl DownloadFilter {
+    pub(crate) fn matches(self, task: &TaskPreview) -> bool {
+        let status_matches = match self.status {
+            DownloadStatusFilter::All => true,
+            DownloadStatusFilter::Completed => task.state == TaskState::Completed,
+            DownloadStatusFilter::Incomplete => task.state != TaskState::Completed,
+        };
+        let category_matches = match self.category {
+            DownloadCategory::All => true,
+            DownloadCategory::Program => {
+                matches!(task.kind, TaskKind::Application | TaskKind::Mobile)
+            }
+            DownloadCategory::Archive => matches!(task.kind, TaskKind::DiskImage),
+            DownloadCategory::Video
+            | DownloadCategory::Audio
+            | DownloadCategory::Document
+            | DownloadCategory::Image
+            | DownloadCategory::Other => false,
+        };
+        status_matches && category_matches
+    }
 }
 
 pub(crate) fn preview_tasks() -> Vec<TaskPreview> {
@@ -121,4 +221,74 @@ pub(crate) fn preview_tasks() -> Vec<TaskPreview> {
             kind: TaskKind::Application,
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DownloadCategory, DownloadFilter, DownloadStatusFilter, StatusFolderMotion, TaskPreview,
+        preview_tasks,
+    };
+
+    fn matching_ids(filter: DownloadFilter) -> Vec<usize> {
+        preview_tasks()
+            .iter()
+            .filter(|task: &&TaskPreview| filter.matches(task))
+            .map(|task| task.id)
+            .collect()
+    }
+
+    #[test]
+    fn download_filter_intersects_status_and_category() {
+        assert_eq!(
+            matching_ids(DownloadFilter::new(
+                DownloadStatusFilter::Completed,
+                DownloadCategory::Program,
+            )),
+            [0, 2],
+        );
+        assert_eq!(
+            matching_ids(DownloadFilter::new(
+                DownloadStatusFilter::Incomplete,
+                DownloadCategory::Archive,
+            )),
+            [3],
+        );
+    }
+
+    #[test]
+    fn toggling_status_folder_keeps_only_one_open() {
+        assert_eq!(
+            DownloadStatusFilter::exclusive_toggle(None, DownloadStatusFilter::All),
+            Some(DownloadStatusFilter::All),
+        );
+        assert_eq!(
+            DownloadStatusFilter::exclusive_toggle(
+                Some(DownloadStatusFilter::All),
+                DownloadStatusFilter::Completed,
+            ),
+            Some(DownloadStatusFilter::Completed),
+        );
+        assert_eq!(
+            DownloadStatusFilter::exclusive_toggle(
+                Some(DownloadStatusFilter::Completed),
+                DownloadStatusFilter::Completed,
+            ),
+            None,
+        );
+    }
+
+    #[test]
+    fn switching_status_folders_keeps_total_open_amount() {
+        let motion = StatusFolderMotion::settled(Some(DownloadStatusFilter::All))
+            .retarget(1., Some(DownloadStatusFilter::Completed));
+        let halfway = 0.5;
+        let all = motion.amount(DownloadStatusFilter::All, halfway);
+        let completed = motion.amount(DownloadStatusFilter::Completed, halfway);
+        let incomplete = motion.amount(DownloadStatusFilter::Incomplete, halfway);
+        assert!((all - 0.5).abs() < f32::EPSILON);
+        assert!((completed - 0.5).abs() < f32::EPSILON);
+        assert!((incomplete).abs() < f32::EPSILON);
+        assert!((all + completed + incomplete - 1.).abs() < f32::EPSILON);
+    }
 }

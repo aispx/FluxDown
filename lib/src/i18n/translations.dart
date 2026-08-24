@@ -70,6 +70,7 @@ class S {
   String get statusDownloading => _r('statusDownloading');
   String get statusPaused => _r('statusPaused');
   String get statusCompleted => _r('statusCompleted');
+  String get statusIncomplete => _r('statusIncomplete');
   String get statusError => _r('statusError');
   String get statusPreparing => _r('statusPreparing');
   String get statusVerifying => _r('statusVerifying');

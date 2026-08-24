@@ -27,6 +27,7 @@
   "statusDownloading": "Downloading",
   "statusPaused": "Paused",
   "statusCompleted": "Completed",
+  "statusIncomplete": "Incomplete",
   "statusError": "Error",
   "statusPreparing": "Preparing",
   "statusVerifying": "Verifying files",

@@ -3,7 +3,6 @@ use gpui::SharedString;
 
 #[derive(Clone)]
 pub(crate) struct DownloadStrings {
-    pub(crate) category_all: SharedString,
     pub(crate) category_archive: SharedString,
     pub(crate) category_audio: SharedString,
     pub(crate) category_document: SharedString,
@@ -23,15 +22,11 @@ pub(crate) struct DownloadStrings {
     pub(crate) pause: SharedString,
     pub(crate) resume: SharedString,
     pub(crate) main_queue: SharedString,
-    pub(crate) sidebar_category: SharedString,
     pub(crate) sidebar_queues: SharedString,
-    pub(crate) sidebar_status: SharedString,
     pub(crate) status_all: SharedString,
     pub(crate) status_completed: SharedString,
-    pub(crate) status_downloading: SharedString,
-    pub(crate) status_error: SharedString,
+    pub(crate) status_incomplete: SharedString,
     pub(crate) status_paused: SharedString,
-    pub(crate) status_seeding: SharedString,
     pub(crate) stop_all: SharedString,
     pub(crate) today: SharedString,
     pub(crate) view_columns_at_least_one: SharedString,
@@ -42,7 +37,6 @@ pub(crate) struct DownloadStrings {
 impl DownloadStrings {
     pub(crate) fn from_translator(translator: &Translator) -> Self {
         Self {
-            category_all: shared(translator.text(keys::CATEGORY_ALL)),
             category_archive: shared(translator.text(keys::CATEGORY_ARCHIVE)),
             category_audio: shared(translator.text(keys::CATEGORY_AUDIO)),
             category_document: shared(translator.text(keys::CATEGORY_DOCUMENT)),
@@ -62,15 +56,11 @@ impl DownloadStrings {
             new_download: shared(translator.text(keys::NEW_DOWNLOAD)),
             pause: shared(translator.text(keys::PAUSE)),
             resume: shared(translator.text(keys::RESUME)),
-            sidebar_category: shared(translator.text(keys::SIDEBAR_CATEGORY)),
             sidebar_queues: shared(translator.text(keys::SIDEBAR_QUEUES)),
-            sidebar_status: shared(translator.text(keys::SIDEBAR_STATUS)),
             status_all: shared(translator.text(keys::TAB_ALL)),
             status_completed: shared(translator.text(keys::STATUS_COMPLETED)),
-            status_downloading: shared(translator.text(keys::STATUS_DOWNLOADING)),
-            status_error: shared(translator.text(keys::STATUS_ERROR)),
+            status_incomplete: shared(translator.text(keys::STATUS_INCOMPLETE)),
             status_paused: shared(translator.text(keys::STATUS_PAUSED)),
-            status_seeding: shared(translator.text(keys::STATUS_SEEDING)),
             stop_all: shared(translator.text(keys::STOP_ALL)),
             today: shared(translator.text(keys::TODAY)),
             view_columns_at_least_one: shared(translator.text(keys::VIEW_COLUMNS_AT_LEAST_ONE)),

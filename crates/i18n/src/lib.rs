@@ -54,6 +54,7 @@ pub mod keys {
     pub const SIDEBAR_QUEUES: &str = "sidebarQueues";
     pub const SIDEBAR_STATUS: &str = "sidebarStatus";
     pub const STATUS_COMPLETED: &str = "statusCompleted";
+    pub const STATUS_INCOMPLETE: &str = "statusIncomplete";
     pub const STATUS_DOWNLOADING: &str = "statusDownloading";
     pub const STATUS_ERROR: &str = "statusError";
     pub const VIEW_COLUMNS_AT_LEAST_ONE: &str = "viewColumnsAtLeastOne";

@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use fluxdown_ui_i18n::Translator;
 use gpui::{
     AppContext as _, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled,
@@ -10,21 +12,25 @@ use gpui_component::{
 
 use crate::{
     components::task_table::DownloadTableDelegate,
-    model::{SidebarItem, preview_tasks},
+    model::{
+        DownloadFilter, DownloadStatusFilter, SidebarSelection, StatusFolderMotion, preview_tasks,
+    },
     strings::DownloadStrings,
 };
 
 actions!(downloads, [SelectAllTasks]);
 
 pub(crate) const TASK_ROW_HEIGHT: f32 = 38.;
+pub(crate) const FOLDER_MOTION_DURATION: Duration = Duration::from_millis(200);
 
 /// 下载能力的顶层页面。
 pub struct DownloadView {
     pub(crate) strings: DownloadStrings,
-    pub(crate) selected_item: SidebarItem,
-    pub(crate) status_expanded: bool,
+    pub(crate) selected_item: SidebarSelection,
+    pub(crate) expanded_status: Option<DownloadStatusFilter>,
+    pub(crate) folder_motion: StatusFolderMotion,
+    pub(crate) folder_motion_started_at: Option<Instant>,
     pub(crate) queues_expanded: bool,
-    pub(crate) categories_expanded: bool,
     pub(crate) table_state: Entity<TableState<DownloadTableDelegate>>,
     resizable_state: Entity<ResizableState>,
     resizable_state_initialized: bool,
@@ -58,10 +64,11 @@ impl DownloadView {
 
         Self {
             strings,
-            selected_item: SidebarItem::All,
-            status_expanded: true,
+            selected_item: SidebarSelection::Download(DownloadFilter::ALL),
+            expanded_status: Some(DownloadStatusFilter::All),
+            folder_motion: StatusFolderMotion::settled(Some(DownloadStatusFilter::All)),
+            folder_motion_started_at: None,
             queues_expanded: true,
-            categories_expanded: true,
             table_state,
             resizable_state: cx.new(|_| ResizableState::default()),
             resizable_state_initialized: false,
@@ -97,7 +104,7 @@ impl DownloadView {
 }
 
 impl Render for DownloadView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main_panel_measured = self
             .resizable_state
             .read(cx)
@@ -121,7 +128,7 @@ impl Render for DownloadView {
                         .size(px(160.))
                         .flex_none()
                         .size_range(px(148.)..px(280.))
-                        .child(self.render_sidebar(cx)),
+                        .child(self.render_sidebar(window, cx)),
                 )
                 .child(resizable_panel().child(self.render_main(cx))),
         )
