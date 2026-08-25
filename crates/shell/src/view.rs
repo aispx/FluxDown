@@ -136,10 +136,8 @@ impl AuxiliaryWindowView {
                     .size_full()
                     .min_w_0()
                     .items_center()
-                    .gap(spacing.sm)
-                    .pl(spacing.xxs)
+                    .pl(spacing.sm)
                     .pr(spacing.md)
-                    .child(img(APP_LOGO_PATH).size(px(16.)))
                     .child(
                         div()
                             .min_w_0()

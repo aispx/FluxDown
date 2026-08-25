@@ -16,7 +16,7 @@ const MI_SANS_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Regu
 const MI_SANS_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Medium.ttf");
 const MI_SANS_SEMIBOLD: &[u8] = include_bytes!("../../../assets/fonts/MiSans-Semibold.ttf");
 
-const SETTINGS_WINDOW_SIZE: gpui::Size<gpui::Pixels> = size(px(920.), px(680.));
+const SETTINGS_WINDOW_SIZE: gpui::Size<gpui::Pixels> = size(px(1240.), px(760.));
 pub(crate) fn run() -> Result<(), I18nError> {
     let catalog = Arc::new(I18nCatalog::load_embedded()?);
     let translator = catalog.translator(&system_locale());
@@ -104,6 +104,7 @@ fn show_settings_window(
     let mut options = auxiliary_window_options(title.clone());
     options.display_id = display_id;
     options.window_bounds = Some(WindowBounds::Windowed(bounds));
+    options.window_min_size = Some(size(px(1000.), px(600.)));
 
     match cx.open_window(options, |window, cx| {
         let window_translator = translator.clone();
